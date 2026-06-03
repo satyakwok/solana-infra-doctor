@@ -4,24 +4,72 @@
 [![codecov](https://codecov.io/gh/satyakwok/solana-infra-doctor/branch/main/graph/badge.svg)](https://codecov.io/gh/satyakwok/solana-infra-doctor)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![Rust](https://img.shields.io/badge/rust-1.76%2B-orange.svg)](https://www.rust-lang.org/)
-[![Status](https://img.shields.io/badge/status-v0.1--foundation-lightgrey.svg)](#current-limitations)
+[![Status](https://img.shields.io/badge/status-v0.1.1-blue.svg)](#current-limitations)
 
-A lightweight Rust CLI for diagnosing Solana RPC and infrastructure health.
+**A Rust CLI for Solana RPC production-readiness diagnostics, comparison, and reports.**
 
-Solana Infra Doctor checks whether a Solana RPC endpoint is online and usable
-for builders, bots, wallets, indexers, and production applications. It is
-intentionally small, dependency-light, and built on raw HTTP JSON-RPC via
+> Not just: *is this RPC online?*
+> But: *which RPC should I actually trust for this workload?*
+
+Solana Infra Doctor diagnoses a Solana RPC endpoint, compares multiple
+endpoints, and produces terminal, JSON, and Markdown reports — so you can decide
+which RPC to trust for wallets, bots, indexers, CI, and production applications.
+
+- Diagnoses core JSON-RPC methods, blockhash freshness, slot data, latency, and
+  performance samples.
+- Compares two or more endpoints and scores each `0`–`100`.
+- Tailors scoring to workload profiles: `general`, `wallet`, `bot`, `indexer`,
+  `ci`.
+- Emits human-readable terminal output, JSON, and Markdown reports.
+
+It is local-first, dependency-light, and built on raw HTTP JSON-RPC via
 `reqwest`.
+
+## Quick Start
+
+Diagnose a single endpoint:
+
+```bash
+sol-doctor check --rpc https://api.mainnet-beta.solana.com
+```
+
+Compare endpoints for a workload and write a report:
+
+```bash
+sol-doctor compare \
+  --rpc https://api.mainnet-beta.solana.com \
+  --rpc https://api.devnet.solana.com \
+  --profile bot \
+  --report rpc-report.md
+```
+
+Prefer to look before running? See [Example Outputs](#example-outputs) for
+sample terminal output and Markdown reports.
+
+## Workload Profiles
+
+| Profile | Use case | Optimized for |
+|---|---|---|
+| `general` | Default diagnostics | balanced checks |
+| `wallet` | Wallets and dApps | reliability and blockhash readiness |
+| `bot` | Bots and automation | latency and slot freshness |
+| `indexer` | Indexers/data pipelines | slot lag and data availability |
+| `ci` | CI/deployment checks | deterministic pass/fail behavior |
 
 ## Why This Exists
 
-A Solana RPC endpoint can accept connections while still being unsuitable for
-production workloads. Basic uptime checks do not tell you whether core RPC
-calls work, recent blockhashes are usable, or the endpoint can return recent
-performance data.
+A Solana RPC endpoint can be reachable and still be unsuitable for real
+workloads. A basic uptime check does not tell you whether:
 
-Solana Infra Doctor gives developers a fast local diagnostic that can be used
-before wiring an endpoint into application code, CI jobs, infrastructure
+- core JSON-RPC methods actually work
+- recent blockhashes are usable
+- slot data is fresh
+- latency is acceptable
+- performance samples are available
+- one endpoint is better than another for a specific workload
+
+Solana Infra Doctor answers those questions with a fast local diagnostic you can
+run before wiring an endpoint into application code, CI jobs, infrastructure
 automation, or operational runbooks.
 
 ## What It Checks Today
@@ -340,12 +388,13 @@ deterministic heuristics, not a guarantee of provider behavior.
 
 ## Current Limitations
 
-- HTTP JSON-RPC only; WebSocket diagnostics are not implemented yet.
-- Checks run sequentially in v0.1.
-- Verdicts are deterministic but intentionally conservative.
+- HTTP JSON-RPC only; WebSocket diagnostics are not included yet.
+- Compare checks currently run sequentially.
+- Scores are deterministic heuristics, not provider guarantees.
+- This is a local-first CLI, not a hosted monitoring service.
+- No Token Program, Token-2022, transaction simulation, or account indexing
+  checks yet.
 - No Solana SDK dependencies are used yet.
-- No Token Program, Token-2022, transaction simulation, account indexing, or
-  endpoint comparison checks yet.
 - No Prometheus exporter, dashboard, hosted cloud service, marketplace, token,
   NFT, points, airdrop, or governance features.
 
