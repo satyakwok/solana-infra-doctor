@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4 - Unreleased
+
+- Align CLI help text with the current production-readiness positioning.
+- Add an example for mixed-network comparison rejection.
+- Clean up stale merged branch metadata.
+
 ## 0.1.3 - 2026-06-03
 
 - Harden RPC URL and API-key redaction across terminal, JSON, Markdown, and

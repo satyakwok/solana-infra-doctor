@@ -376,6 +376,8 @@ diagnostic runs, not provider benchmarks.
   — Markdown comparison report for the `bot` profile.
 - [`examples/reports/compare-indexer-report.md`](examples/reports/compare-indexer-report.md)
   — Markdown comparison report for the `indexer` profile.
+- [`examples/mixed-network-rejection.md`](examples/mixed-network-rejection.md)
+  — how compare rejects endpoints from different Solana networks.
 
 These reports are useful as a readiness signal for RPC comparison, bot/indexer
 readiness review, CI discussion, and consulting-style diagnostics. Scores are

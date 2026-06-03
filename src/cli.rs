@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[command(
     name = "sol-doctor",
     version,
-    about = "A lightweight Rust CLI for diagnosing Solana RPC and infrastructure health."
+    about = "A Rust CLI for Solana RPC production-readiness diagnostics and comparison."
 )]
 pub struct Cli {
     #[command(subcommand)]
