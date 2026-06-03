@@ -402,6 +402,12 @@ deterministic heuristics, not a guarantee of provider behavior.
 - No Prometheus exporter, dashboard, hosted cloud service, marketplace, token,
   NFT, points, airdrop, or governance features.
 
+## Security and Privacy
+
+Solana Infra Doctor redacts credentials and likely API keys from displayed RPC
+URLs, error messages, JSON output, and Markdown reports. Avoid sharing raw
+private RPC URLs.
+
 ## Coverage Policy
 
 CI enforces at least `95%` line coverage with `cargo llvm-cov`. Coverage reports

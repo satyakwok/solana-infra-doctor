@@ -5,9 +5,20 @@ use serde_json::Value;
 use std::time::Duration;
 use url::Url;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RpcEndpoint {
     url: Url,
+}
+
+// Custom Debug so the raw URL (which may carry credentials or API keys) never
+// leaks through `{:?}`, tracing, or panic messages.
+impl std::fmt::Debug for RpcEndpoint {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RpcEndpoint")
+            .field("url", &self.redacted())
+            .finish()
+    }
 }
 
 impl RpcEndpoint {
@@ -39,15 +50,7 @@ impl RpcEndpoint {
     }
 
     pub fn redacted(&self) -> String {
-        let mut url = self.url.clone();
-        if url.password().is_some() {
-            let _ = url.set_password(Some("***"));
-        }
-        if !url.username().is_empty() {
-            let _ = url.set_username("***");
-        }
-        url.set_query(None);
-        url.to_string()
+        crate::redact::redact_url(&self.url)
     }
 }
 
