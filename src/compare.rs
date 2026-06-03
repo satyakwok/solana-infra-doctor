@@ -5,14 +5,19 @@ use crate::{
     verdict::Verdict,
 };
 use serde::Serialize;
-use std::{cmp::Ordering, fs};
+use std::{cmp::Ordering, collections::BTreeSet, fs};
+
+const MISMATCH_REASON: &str =
+    "Endpoints returned different genesis hashes, indicating different Solana networks.";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CompareReport {
     pub profile: CompareProfileSummary,
     pub endpoints: Vec<CompareEndpoint>,
-    pub best_endpoint_index: usize,
-    pub worst_endpoint_index: usize,
+    pub best_endpoint_index: Option<usize>,
+    pub worst_endpoint_index: Option<usize>,
+    pub network_mismatch: bool,
+    pub mismatch_reason: Option<String>,
     pub recommendation: String,
 }
 
@@ -54,6 +59,7 @@ impl From<CompareProfile> for CompareProfileSummary {
 pub struct CompareEndpoint {
     pub index: usize,
     pub url: String,
+    pub genesis_hash: Option<String>,
     pub verdict: Verdict,
     pub score: u8,
     pub slot: Option<u64>,
@@ -86,7 +92,15 @@ pub async fn run_compare(args: CompareArgs) -> Result<CompareReport, AppError> {
 }
 
 pub fn build_compare_report(profile: CompareProfile, reports: &[CheckReport]) -> CompareReport {
-    let highest_slot = reports.iter().filter_map(extract_slot).max();
+    let network_mismatch = has_genesis_mismatch(reports);
+    // Slot lag across different networks is meaningless, so suppress the shared
+    // baseline when genesis hashes disagree.
+    let highest_slot = if network_mismatch {
+        None
+    } else {
+        reports.iter().filter_map(extract_slot).max()
+    };
+
     let mut endpoints: Vec<_> = reports
         .iter()
         .enumerate()
@@ -96,6 +110,18 @@ pub fn build_compare_report(profile: CompareProfile, reports: &[CheckReport]) ->
     for endpoint in &mut endpoints {
         endpoint.score = score_endpoint(profile, endpoint);
         endpoint.notes = profile_notes(profile, endpoint);
+    }
+
+    if network_mismatch {
+        return CompareReport {
+            profile: profile.into(),
+            endpoints,
+            best_endpoint_index: None,
+            worst_endpoint_index: None,
+            network_mismatch: true,
+            mismatch_reason: Some(MISMATCH_REASON.to_string()),
+            recommendation: mismatch_recommendation(),
+        };
     }
 
     let best_endpoint_index = endpoints
@@ -118,10 +144,32 @@ pub fn build_compare_report(profile: CompareProfile, reports: &[CheckReport]) ->
     CompareReport {
         profile: profile.into(),
         endpoints,
-        best_endpoint_index,
-        worst_endpoint_index,
+        best_endpoint_index: Some(best_endpoint_index),
+        worst_endpoint_index: Some(worst_endpoint_index),
+        network_mismatch: false,
+        mismatch_reason: None,
         recommendation,
     }
+}
+
+fn has_genesis_mismatch(reports: &[CheckReport]) -> bool {
+    let distinct: BTreeSet<&str> = reports.iter().filter_map(genesis_hash).collect();
+    distinct.len() >= 2
+}
+
+fn genesis_hash(report: &CheckReport) -> Option<&str> {
+    report
+        .checks
+        .iter()
+        .find(|check| check.method == "getGenesisHash" && check.status == CheckStatus::Success)
+        .map(|check| check.detail.as_str())
+}
+
+fn mismatch_recommendation() -> String {
+    "Cannot compare endpoints from different Solana networks.\n\
+     Slot lag and ranking are disabled because the endpoints report different genesis hashes.\n\
+     Re-run compare with endpoints on the same network."
+        .to_string()
 }
 
 fn build_endpoint(
@@ -146,6 +194,7 @@ fn build_endpoint(
     let mut endpoint = CompareEndpoint {
         index,
         url: report.rpc_url.clone(),
+        genesis_hash: genesis_hash(report).map(str::to_string),
         verdict: report.verdict,
         score: 0,
         slot,
@@ -362,40 +411,55 @@ fn build_recommendation(
         ),
     ];
 
-    if let Some(worst) = endpoints
+    let best = endpoints
         .iter()
-        .find(|endpoint| endpoint.index == worst_endpoint_index)
-    {
-        match profile {
-            CompareProfile::General => {
-                lines.push(format!(
-                    "Review RPC #{} before using it for production traffic.",
-                    worst.index
-                ));
-            }
-            CompareProfile::Wallet => {
-                lines.push(format!(
-                    "Avoid RPC #{} for wallet transaction flows if blockhash or core checks failed.",
-                    worst.index
-                ));
-            }
-            CompareProfile::Bot => {
-                lines.push(format!(
-                    "Avoid RPC #{} for latency-sensitive or slot-sensitive workloads.",
-                    worst.index
-                ));
-            }
-            CompareProfile::Indexer => {
-                lines.push(format!(
-                    "Avoid RPC #{} for freshness-sensitive indexer workloads.",
-                    worst.index
-                ));
-            }
-            CompareProfile::Ci => {
-                lines.push(
-                    "CI profile is strict: WARNING or BAD endpoints are not recommended for pass gates."
-                        .to_string(),
-                );
+        .find(|endpoint| endpoint.index == best_endpoint_index);
+    let worst = endpoints
+        .iter()
+        .find(|endpoint| endpoint.index == worst_endpoint_index);
+
+    if let (Some(best), Some(worst)) = (best, worst) {
+        // When the lower-ranked endpoint is actually faster but staler, calling
+        // it "latency-sensitive risk" is misleading; describe the real tradeoff.
+        if !matches!(profile, CompareProfile::Ci) && lower_latency_but_staler(worst, best) {
+            lines.push(format!(
+                "RPC #{} has lower latency, but RPC #{} is fresher. For {} workloads, slot freshness may matter more than raw HTTP latency.",
+                worst.index,
+                best.index,
+                profile.label()
+            ));
+        } else {
+            match profile {
+                CompareProfile::General => {
+                    lines.push(format!(
+                        "Review RPC #{} before using it for production traffic.",
+                        worst.index
+                    ));
+                }
+                CompareProfile::Wallet => {
+                    lines.push(format!(
+                        "Avoid RPC #{} for wallet transaction flows if blockhash or core checks failed.",
+                        worst.index
+                    ));
+                }
+                CompareProfile::Bot => {
+                    lines.push(format!(
+                        "Avoid RPC #{} for latency-sensitive or slot-sensitive workloads.",
+                        worst.index
+                    ));
+                }
+                CompareProfile::Indexer => {
+                    lines.push(format!(
+                        "Avoid RPC #{} for freshness-sensitive indexer workloads.",
+                        worst.index
+                    ));
+                }
+                CompareProfile::Ci => {
+                    lines.push(
+                        "CI profile is strict: WARNING or BAD endpoints are not recommended for pass gates."
+                            .to_string(),
+                    );
+                }
             }
         }
     }
@@ -403,14 +467,39 @@ fn build_recommendation(
     lines.join("\n")
 }
 
+/// True when `worst` has lower average latency than `best` but is further behind
+/// on slot freshness — the latency-versus-freshness tradeoff.
+fn lower_latency_but_staler(worst: &CompareEndpoint, best: &CompareEndpoint) -> bool {
+    let faster = matches!(
+        (worst.average_latency_ms, best.average_latency_ms),
+        (Some(worst_latency), Some(best_latency)) if worst_latency < best_latency
+    );
+    let staler = matches!(
+        (worst.slot_lag, best.slot_lag),
+        (Some(worst_lag), Some(best_lag)) if worst_lag > best_lag
+    );
+    faster && staler
+}
+
 pub fn render_human(report: &CompareReport) -> String {
     let mut output = String::new();
     output.push_str("Solana Infra Doctor — RPC Compare\n\n");
     output.push_str(&format!("Profile: {}\n\n", report.profile.label()));
 
+    if report.network_mismatch {
+        output.push_str("Cannot compare endpoints from different Solana networks.\n");
+        output.push_str(
+            "Endpoints returned different genesis hashes; ranking and slot lag are disabled.\n\n",
+        );
+    }
+
     for endpoint in &report.endpoints {
         output.push_str(&format!("RPC #{}\n", endpoint.index));
         output.push_str(&format!("URL: {}\n", endpoint.url));
+        output.push_str(&format!(
+            "Genesis: {}\n",
+            format_genesis(&endpoint.genesis_hash)
+        ));
         output.push_str(&format!("Verdict: {}\n", endpoint.verdict));
         output.push_str(&format!("Score: {}/100\n", endpoint.score));
         output.push_str(&format!("Slot: {}\n", format_slot(endpoint.slot)));
@@ -457,10 +546,19 @@ pub fn render_markdown(report: &CompareReport) -> String {
     let mut output = String::new();
     output.push_str("# Solana Infra Doctor RPC Compare Report\n\n");
     output.push_str(&format!("Profile: `{}`\n\n", report.profile.label()));
+
+    if report.network_mismatch {
+        output.push_str("## Network Mismatch\n\n");
+        output.push_str(
+            "Cannot compare endpoints from different Solana networks. Endpoints returned different genesis hashes, so ranking and slot lag are disabled.\n\n",
+        );
+    }
+
     output.push_str("## Summary\n\n");
     output.push_str(&format!(
-        "- Best RPC: RPC #{}\n- Worst RPC: RPC #{}\n\n",
-        report.best_endpoint_index, report.worst_endpoint_index
+        "- Best RPC: {}\n- Worst RPC: {}\n\n",
+        format_rank(report.best_endpoint_index),
+        format_rank(report.worst_endpoint_index)
     ));
 
     output.push_str("## Comparison\n\n");
@@ -489,6 +587,10 @@ pub fn render_markdown(report: &CompareReport) -> String {
     for endpoint in &report.endpoints {
         output.push_str(&format!("### RPC #{}\n\n", endpoint.index));
         output.push_str(&format!("- URL: `{}`\n", endpoint.url));
+        output.push_str(&format!(
+            "- Genesis: `{}`\n",
+            format_genesis(&endpoint.genesis_hash)
+        ));
         output.push_str(&format!("- Verdict: `{}`\n", endpoint.verdict));
         output.push_str(&format!("- Score: {}/100\n", endpoint.score));
         output.push_str(&format!("- Slot: {}\n", format_slot(endpoint.slot)));
@@ -538,6 +640,19 @@ pub fn write_markdown_report(
         path: path.display().to_string(),
         source,
     })
+}
+
+fn format_genesis(genesis_hash: &Option<String>) -> String {
+    genesis_hash
+        .as_deref()
+        .map_or_else(|| "n/a".to_string(), str::to_string)
+}
+
+fn format_rank(index: Option<usize>) -> String {
+    index.map_or_else(
+        || "n/a (different networks)".to_string(),
+        |index| format!("RPC #{index}"),
+    )
 }
 
 fn format_slot(slot: Option<u64>) -> String {

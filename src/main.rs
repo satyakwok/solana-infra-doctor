@@ -49,7 +49,9 @@ async fn run() -> anyhow::Result<i32> {
             } else {
                 print!("{}", compare::render_human(&result));
             }
-            Ok(0)
+            // A mixed-network comparison cannot produce a reliable ranking, so it
+            // exits with the UNKNOWN code (3); same-network comparisons stay 0.
+            Ok(if result.network_mismatch { 3 } else { 0 })
         }
     }
 }

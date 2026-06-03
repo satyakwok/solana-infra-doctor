@@ -197,6 +197,10 @@ workloads by scoring each endpoint from `0` to `100`, calculating slot lag
 against the freshest observed endpoint, listing failed checks, and recommending
 the best and worst endpoint.
 
+Compare mode is intended for endpoints on the same Solana network. If endpoints
+return different genesis hashes, Solana Infra Doctor rejects the comparison
+because slot lag and ranking are not meaningful across networks.
+
 ## Human Output Example
 
 ```text

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 - Unreleased
+
+- Compare mode now rejects mixed-network endpoints with mismatched genesis
+  hashes; slot lag and best/worst ranking are disabled across different
+  Solana networks.
+- Recommendations now describe the latency-versus-slot-freshness tradeoff more
+  accurately instead of mislabeling a faster-but-staler endpoint as a
+  latency risk.
+
 ## 0.1.1 - 2026-06-03
 
 - Add example diagnostic outputs under `examples/` (terminal output and Markdown reports).

@@ -679,8 +679,9 @@ fn compare_slot_lag_scoring_and_selection_work() {
 
     let report = build_compare_report(CompareProfile::General, &reports);
 
-    assert_eq!(report.best_endpoint_index, 1);
-    assert_eq!(report.worst_endpoint_index, 3);
+    assert!(!report.network_mismatch);
+    assert_eq!(report.best_endpoint_index, Some(1));
+    assert_eq!(report.worst_endpoint_index, Some(3));
     assert_eq!(report.endpoints[0].slot_lag, Some(0));
     assert_eq!(report.endpoints[1].slot_lag, Some(300));
     assert_eq!(report.endpoints[2].score, 0);
@@ -691,6 +692,7 @@ fn compare_profiles_apply_expected_adjustments_and_notes() {
     let base = CompareEndpoint {
         index: 1,
         url: "https://example.com/".to_string(),
+        genesis_hash: None,
         verdict: Verdict::Good,
         score: 0,
         slot: Some(100),
@@ -877,8 +879,8 @@ fn compare_tie_breakers_and_format_variants_are_covered() {
     ];
     let report = build_compare_report(CompareProfile::Wallet, &reports);
 
-    assert_eq!(report.best_endpoint_index, 2);
-    assert_eq!(report.worst_endpoint_index, 1);
+    assert_eq!(report.best_endpoint_index, Some(2));
+    assert_eq!(report.worst_endpoint_index, Some(1));
     assert!(report.endpoints[1]
         .notes
         .iter()
@@ -933,7 +935,7 @@ fn compare_tie_breakers_and_format_variants_are_covered() {
         ),
     ];
     let tie_report = build_compare_report(CompareProfile::General, &tie_reports);
-    assert_eq!(tie_report.best_endpoint_index, 1);
+    assert_eq!(tie_report.best_endpoint_index, Some(1));
 
     let latency_tie_reports = vec![
         compare_check_report(
@@ -954,7 +956,7 @@ fn compare_tie_breakers_and_format_variants_are_covered() {
         ),
     ];
     let latency_tie_report = build_compare_report(CompareProfile::General, &latency_tie_reports);
-    assert_eq!(latency_tie_report.best_endpoint_index, 2);
+    assert_eq!(latency_tie_report.best_endpoint_index, Some(2));
 
     let slot_tie_reports = vec![
         compare_check_report(
@@ -975,11 +977,108 @@ fn compare_tie_breakers_and_format_variants_are_covered() {
         ),
     ];
     let slot_tie_report = build_compare_report(CompareProfile::General, &slot_tie_reports);
-    assert_eq!(slot_tie_report.best_endpoint_index, 2);
+    assert_eq!(slot_tie_report.best_endpoint_index, Some(2));
 }
 
 fn temp_report_path(file_name: &str) -> PathBuf {
     let mut path = std::env::temp_dir();
     path.push(format!("{}-{file_name}", std::process::id()));
     path
+}
+
+fn with_genesis(
+    mut report: solana_infra_doctor::checks::CheckReport,
+    hash: &str,
+) -> solana_infra_doctor::checks::CheckReport {
+    for check in &mut report.checks {
+        if check.method == "getGenesisHash" {
+            check.detail = hash.to_string();
+            check.status = CheckStatus::Success;
+            check.error_kind = None;
+        }
+    }
+    report
+}
+
+#[test]
+fn compare_rejects_mismatched_genesis_networks() {
+    let mainnet = compare_check_report(
+        "https://api.mainnet-beta.solana.com/",
+        Verdict::Good,
+        Some(347_000_000),
+        Some(140),
+        true,
+        &[],
+    );
+    let devnet = with_genesis(
+        compare_check_report(
+            "https://api.devnet.solana.com/",
+            Verdict::Good,
+            Some(466_000_000),
+            Some(150),
+            true,
+            &[],
+        ),
+        "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+    );
+    let report = build_compare_report(CompareProfile::Bot, &[mainnet, devnet]);
+
+    assert!(report.network_mismatch);
+    assert_eq!(report.best_endpoint_index, None);
+    assert_eq!(report.worst_endpoint_index, None);
+    assert!(report.mismatch_reason.is_some());
+    assert!(report
+        .endpoints
+        .iter()
+        .all(|endpoint| endpoint.slot_lag.is_none()));
+
+    let human = render_compare_human(&report);
+    assert!(human.contains("Cannot compare endpoints from different Solana networks."));
+    assert!(human.contains("EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"));
+
+    let json = render_compare_json(&report).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed["network_mismatch"], true);
+    assert!(parsed["mismatch_reason"].is_string());
+    assert!(parsed["best_endpoint_index"].is_null());
+    assert!(parsed["worst_endpoint_index"].is_null());
+
+    let markdown = render_markdown(&report);
+    assert!(markdown.contains("## Network Mismatch"));
+    assert!(markdown.contains("different Solana networks"));
+    assert!(markdown.contains("- Best RPC: n/a (different networks)"));
+}
+
+#[test]
+fn compare_recommendation_describes_latency_freshness_tradeoff() {
+    let fast_but_stale = compare_check_report(
+        "https://fast-stale.example.com/",
+        Verdict::Good,
+        Some(100),
+        Some(120),
+        true,
+        &[],
+    );
+    let slow_but_fresh = compare_check_report(
+        "https://slow-fresh.example.com/",
+        Verdict::Good,
+        Some(200),
+        Some(600),
+        true,
+        &[],
+    );
+    let report = build_compare_report(CompareProfile::Bot, &[fast_but_stale, slow_but_fresh]);
+
+    assert!(!report.network_mismatch);
+    assert_eq!(report.best_endpoint_index, Some(2));
+    assert_eq!(report.worst_endpoint_index, Some(1));
+    assert!(report
+        .recommendation
+        .contains("RPC #1 has lower latency, but RPC #2 is fresher"));
+    assert!(report
+        .recommendation
+        .contains("slot freshness may matter more than raw HTTP latency"));
+    assert!(!report
+        .recommendation
+        .contains("Avoid RPC #1 for latency-sensitive"));
 }
