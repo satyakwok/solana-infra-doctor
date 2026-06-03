@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.1 - Unreleased
+## 0.2.1 - 2026-06-03
 
 - Deduplicate thiserror dependency versions by updating the direct dependency to thiserror 2.
 
