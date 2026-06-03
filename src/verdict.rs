@@ -31,3 +31,24 @@ impl std::fmt::Display for Verdict {
         formatter.write_str(value)
     }
 }
+
+#[cfg(all(test, not(coverage)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maps_verdicts_to_exit_codes() {
+        assert_eq!(Verdict::Good.exit_code(), 0);
+        assert_eq!(Verdict::Warning.exit_code(), 1);
+        assert_eq!(Verdict::Bad.exit_code(), 2);
+        assert_eq!(Verdict::Unknown.exit_code(), 3);
+    }
+
+    #[test]
+    fn displays_uppercase_verdicts() {
+        assert_eq!(Verdict::Good.to_string(), "GOOD");
+        assert_eq!(Verdict::Warning.to_string(), "WARNING");
+        assert_eq!(Verdict::Bad.to_string(), "BAD");
+        assert_eq!(Verdict::Unknown.to_string(), "UNKNOWN");
+    }
+}

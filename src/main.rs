@@ -1,15 +1,11 @@
 #![forbid(unsafe_code)]
 
-mod checks;
-mod cli;
-mod error;
-mod latency;
-mod report;
-mod rpc;
-mod verdict;
-
 use clap::Parser;
-use cli::{Cli, Commands};
+use solana_infra_doctor::{
+    checks,
+    cli::{Cli, Commands},
+    report,
+};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

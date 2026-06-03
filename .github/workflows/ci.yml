@@ -6,6 +6,10 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   rust:
     name: Rust
@@ -18,7 +22,10 @@ jobs:
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt, clippy, llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -28,3 +35,20 @@ jobs:
 
       - name: Test
         run: cargo test
+
+      - name: Generate coverage
+        run: >
+          cargo llvm-cov --all-targets
+          --ignore-filename-regex 'main.rs'
+          --fail-under-lines 95
+          --lcov
+          --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          flags: rust
+          name: rust-coverage
+          fail_ci_if_error: true
+          use_oidc: true

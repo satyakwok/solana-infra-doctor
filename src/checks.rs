@@ -537,9 +537,113 @@ fn summarize(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(coverage)))]
 mod tests {
     use super::*;
+    use std::{
+        io::{Read, Write},
+        net::{TcpListener, TcpStream},
+        thread::{self, JoinHandle},
+    };
+
+    struct MockRpcServer {
+        url: String,
+        handle: JoinHandle<()>,
+    }
+
+    impl MockRpcServer {
+        fn start(responses: Vec<&'static str>) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let url = format!("http://{}", listener.local_addr().unwrap());
+            let handle = thread::spawn(move || {
+                for response in responses {
+                    let (mut stream, _) = listener.accept().unwrap();
+                    let _body = read_http_body(&mut stream);
+                    write_http_response(&mut stream, response);
+                }
+            });
+
+            Self { url, handle }
+        }
+
+        fn join(self) {
+            self.handle.join().unwrap();
+        }
+    }
+
+    fn read_http_body(stream: &mut TcpStream) -> String {
+        let mut buffer = Vec::new();
+        let mut chunk = [0u8; 1024];
+        loop {
+            let bytes_read = stream.read(&mut chunk).unwrap();
+            assert!(bytes_read > 0, "connection closed before headers completed");
+            buffer.extend_from_slice(&chunk[..bytes_read]);
+            if buffer.windows(4).any(|window| window == b"\r\n\r\n") {
+                break;
+            }
+        }
+
+        let header_end = buffer
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        let headers = String::from_utf8_lossy(&buffer[..header_end]);
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("content-length: ")
+                    .or_else(|| line.strip_prefix("Content-Length: "))
+            })
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or_default();
+
+        while buffer.len() < header_end + content_length {
+            let bytes_read = stream.read(&mut chunk).unwrap();
+            assert!(bytes_read > 0, "connection closed before body completed");
+            buffer.extend_from_slice(&chunk[..bytes_read]);
+        }
+
+        String::from_utf8(buffer[header_end..header_end + content_length].to_vec()).unwrap()
+    }
+
+    fn write_http_response(stream: &mut TcpStream, body: &str) {
+        let response = format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream.write_all(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    }
+
+    fn health_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":1,"result":"ok"}"#
+    }
+
+    fn version_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":2,"result":{"solana-core":"4.0.0","feature-set":123}}"#
+    }
+
+    fn genesis_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":3,"result":"5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"}"#
+    }
+
+    fn slot_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":4,"result":424013263}"#
+    }
+
+    fn latest_blockhash_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":5,"result":{"value":{"blockhash":"7xKXtgQvExample111111111111111111111111111","lastValidBlockHeight":123456}}}"#
+    }
+
+    fn blockhash_valid_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":6,"result":{"value":true}}"#
+    }
+
+    fn performance_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":7,"result":[{"slot":10,"numSlots":64,"numTransactions":124000,"samplePeriodSecs":60,"numNonVoteTransactions":90000}]}"#
+    }
 
     fn success(category: CheckCategory, method: &'static str, latency_ms: u128) -> RpcCheck {
         RpcCheck {
@@ -563,6 +667,149 @@ mod tests {
             error_kind: Some(error_kind),
             critical: category.is_critical(),
         }
+    }
+
+    fn args_for(url: String) -> CheckArgs {
+        CheckArgs {
+            rpc: url,
+            json: false,
+            fail_on_warning: false,
+            timeout_ms: 1_000,
+        }
+    }
+
+    #[tokio::test]
+    async fn run_check_returns_good_for_mocked_healthy_rpc() {
+        let server = MockRpcServer::start(vec![
+            health_ok(),
+            version_ok(),
+            genesis_ok(),
+            slot_ok(),
+            latest_blockhash_ok(),
+            blockhash_valid_ok(),
+            performance_ok(),
+        ]);
+
+        let expected_url = format!("{}/", server.url);
+        let report = run_check(args_for(server.url.clone())).await.unwrap();
+        server.join();
+
+        assert_eq!(report.verdict, Verdict::Good);
+        assert_eq!(report.rpc_url, expected_url);
+        assert_eq!(report.summary, "all RPC readiness checks succeeded");
+        assert_eq!(report.checks.len(), 7);
+        assert!(report.average_latency_ms.is_some());
+        assert!(report
+            .checks
+            .iter()
+            .all(|check| check.status == CheckStatus::Success));
+    }
+
+    #[tokio::test]
+    async fn run_check_returns_bad_when_critical_blockhash_check_fails() {
+        let server = MockRpcServer::start(vec![
+            health_ok(),
+            version_ok(),
+            genesis_ok(),
+            slot_ok(),
+            r#"{"jsonrpc":"2.0","id":5,"result":{"value":{"blockhash":"","lastValidBlockHeight":123456}}}"#,
+            performance_ok(),
+        ]);
+
+        let report = run_check(args_for(server.url.clone())).await.unwrap();
+        server.join();
+
+        assert_eq!(report.verdict, Verdict::Bad);
+        assert!(report
+            .checks
+            .iter()
+            .any(|check| check.method == "getLatestBlockhash"
+                && check.error_kind == Some(ErrorKind::MalformedResponse)));
+        assert!(report
+            .checks
+            .iter()
+            .any(|check| check.method == "isBlockhashValid"
+                && check.detail == "latest blockhash unavailable"));
+    }
+
+    #[tokio::test]
+    async fn run_check_classifies_rpc_error_response() {
+        let server = MockRpcServer::start(vec![
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32005,"message":"node unhealthy"}}"#,
+            version_ok(),
+            genesis_ok(),
+            slot_ok(),
+            latest_blockhash_ok(),
+            blockhash_valid_ok(),
+            performance_ok(),
+        ]);
+
+        let report = run_check(args_for(server.url.clone())).await.unwrap();
+        server.join();
+
+        let health = report
+            .checks
+            .iter()
+            .find(|check| check.method == "getHealth")
+            .unwrap();
+        assert_eq!(report.verdict, Verdict::Bad);
+        assert_eq!(health.error_kind, Some(ErrorKind::RpcError));
+        assert_eq!(health.detail, "RPC error -32005: node unhealthy");
+    }
+
+    #[tokio::test]
+    async fn run_check_classifies_malformed_json_rpc_metadata() {
+        let server = MockRpcServer::start(vec![
+            r#"{"jsonrpc":"1.0","id":1,"result":"ok"}"#,
+            version_ok(),
+            genesis_ok(),
+            slot_ok(),
+            latest_blockhash_ok(),
+            blockhash_valid_ok(),
+            performance_ok(),
+        ]);
+
+        let report = run_check(args_for(server.url.clone())).await.unwrap();
+        server.join();
+
+        let health = report
+            .checks
+            .iter()
+            .find(|check| check.method == "getHealth")
+            .unwrap();
+        assert_eq!(report.verdict, Verdict::Bad);
+        assert_eq!(health.error_kind, Some(ErrorKind::MalformedResponse));
+        assert!(health.detail.contains("expected JSON-RPC 2.0"));
+    }
+
+    #[test]
+    fn labels_categories_and_error_kinds() {
+        assert_eq!(CheckCategory::Core.label(), "Core");
+        assert_eq!(CheckCategory::Blockhash.label(), "Blockhash");
+        assert_eq!(CheckCategory::Performance.label(), "Performance");
+
+        assert_eq!(ErrorKind::InvalidUrl.label(), "invalid_url");
+        assert_eq!(ErrorKind::Timeout.label(), "timeout");
+        assert_eq!(ErrorKind::HttpError.label(), "http_error");
+        assert_eq!(ErrorKind::RpcError.label(), "rpc_error");
+        assert_eq!(ErrorKind::MalformedResponse.label(), "malformed_response");
+        assert_eq!(ErrorKind::UnknownError.label(), "unknown_error");
+    }
+
+    #[test]
+    fn summarizes_warning_with_fail_on_warning_policy() {
+        let checks = vec![failed(
+            CheckCategory::Performance,
+            "getRecentPerformanceSamples",
+            ErrorKind::RpcError,
+        )];
+
+        let summary = summarize(Verdict::Warning, &checks, Some(100), true);
+
+        assert_eq!(
+            summary,
+            "RPC is reachable, but 1 non-critical check failed; --fail-on-warning is enabled, so CI should treat this as a failure"
+        );
     }
 
     #[test]

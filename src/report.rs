@@ -76,7 +76,7 @@ pub fn render_json(report: &CheckReport) -> Result<String, AppError> {
     serde_json::to_string_pretty(report).map_err(AppError::SerializeReport)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(coverage)))]
 mod tests {
     use super::*;
     use crate::{

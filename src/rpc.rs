@@ -160,7 +160,7 @@ pub struct PerformanceSample {
     pub num_non_vote_transactions: Option<u64>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(coverage)))]
 mod tests {
     use super::*;
 

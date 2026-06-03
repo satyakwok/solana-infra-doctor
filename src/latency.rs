@@ -25,3 +25,29 @@ pub fn average_latency_ms(latencies: impl IntoIterator<Item = Latency>) -> Optio
 
     total.checked_div(count)
 }
+
+#[cfg(all(test, not(coverage)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn converts_duration_to_milliseconds() {
+        assert_eq!(Latency::from_duration(Duration::from_millis(42)).millis, 42);
+    }
+
+    #[test]
+    fn averages_latencies() {
+        let latencies = [
+            Latency { millis: 100 },
+            Latency { millis: 200 },
+            Latency { millis: 300 },
+        ];
+
+        assert_eq!(average_latency_ms(latencies), Some(200));
+    }
+
+    #[test]
+    fn average_is_none_without_samples() {
+        assert_eq!(average_latency_ms([]), None);
+    }
+}
