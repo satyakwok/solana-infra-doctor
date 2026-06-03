@@ -130,6 +130,7 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
     let endpoint = match RpcEndpoint::parse(&args.rpc) {
         Ok(endpoint) => endpoint,
         Err(AppError::InvalidRpcUrl { reason }) => {
+            let reason = crate::redact::redact_text(&reason);
             return Ok(CheckReport {
                 verdict: Verdict::Bad,
                 rpc_url: "<invalid>".to_string(),
@@ -437,7 +438,10 @@ fn failed_from_response<T>(
 
 fn failed_from_error(category: CheckCategory, method: &'static str, error: AppError) -> RpcCheck {
     let error_kind = classify_error(&error);
-    RpcCheck::failed(category, method, None, error.to_string(), error_kind)
+    // reqwest error Display embeds the request URL (with query string), so the
+    // message must be redacted before it is stored or shown anywhere.
+    let detail = crate::redact::redact_text(&error.to_string());
+    RpcCheck::failed(category, method, None, detail, error_kind)
 }
 
 fn classify_error(error: &AppError) -> ErrorKind {

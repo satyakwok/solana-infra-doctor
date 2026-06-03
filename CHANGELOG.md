@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3 - Unreleased
+
+- Harden RPC URL and API-key redaction across terminal, JSON, Markdown, and
+  error output.
+- Prevent query-string API keys from leaking through HTTP client error
+  messages.
+- Redact likely provider tokens in URL paths (for example `/v2/<token>`) and
+  mask basic-auth credentials.
+
 ## 0.1.2 - 2026-06-03
 
 - Compare mode now rejects mixed-network endpoints with mismatched genesis

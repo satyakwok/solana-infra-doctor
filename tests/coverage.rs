@@ -7,6 +7,7 @@ use solana_infra_doctor::{
         write_markdown_report, CompareEndpoint, CompareProfileSummary,
     },
     latency::{average_latency_ms, Latency},
+    redact::redact_text,
     report::{render_human, render_json},
     rpc::{
         BlockhashValidResponse, JsonRpcRequest, LatestBlockhashResponse, PerformanceSample,
@@ -984,6 +985,91 @@ fn temp_report_path(file_name: &str) -> PathBuf {
     let mut path = std::env::temp_dir();
     path.push(format!("{}-{file_name}", std::process::id()));
     path
+}
+
+#[test]
+fn redaction_masks_credentials_query_and_path_tokens() {
+    let basic = RpcEndpoint::parse("https://user:pass@rpc.example.com/rpc?api-key=FAKE_SECRET_123")
+        .unwrap();
+    let basic_redacted = basic.redacted();
+    assert!(!basic_redacted.contains("pass"));
+    assert!(!basic_redacted.contains("FAKE_SECRET_123"));
+    assert!(basic_redacted.contains("***"));
+
+    let mixed = RpcEndpoint::parse("https://rpc.example.com/?API-KEY=AAASECRET&Token=BBBSECRET")
+        .unwrap()
+        .redacted();
+    assert!(!mixed.contains("AAASECRET"));
+    assert!(!mixed.contains("BBBSECRET"));
+
+    let alchemy = RpcEndpoint::parse("https://solana-mainnet.g.alchemy.com/v2/SECRETALCHEMYKEY")
+        .unwrap()
+        .redacted();
+    assert_eq!(alchemy, "https://solana-mainnet.g.alchemy.com/v2/***");
+
+    let quicknode = RpcEndpoint::parse(
+        "https://example.solana-mainnet.quiknode.pro/abcdef0123456789abcdef0123/",
+    )
+    .unwrap()
+    .redacted();
+    assert!(!quicknode.contains("abcdef0123456789abcdef0123"));
+    assert!(quicknode.contains("***"));
+
+    let public = RpcEndpoint::parse("https://api.mainnet-beta.solana.com")
+        .unwrap()
+        .redacted();
+    assert_eq!(public, "https://api.mainnet-beta.solana.com/");
+
+    let endpoint =
+        RpcEndpoint::parse("https://user:pass@rpc.example.com/v2/SECRETALCHEMYKEY").unwrap();
+    let debug = format!("{endpoint:?}");
+    assert!(!debug.contains("pass"));
+    assert!(!debug.contains("SECRETALCHEMYKEY"));
+    assert!(debug.contains("***"));
+}
+
+#[test]
+fn redaction_sanitizes_error_text_and_passthrough() {
+    let leaked =
+        "error sending request for url (https://rpc.helius.xyz/?api-key=FAKE_SECRET_123): refused";
+    let clean = redact_text(leaked);
+    assert!(!clean.contains("FAKE_SECRET_123"));
+    assert!(clean.contains("https://rpc.helius.xyz/"));
+    assert!(clean.contains("refused"));
+
+    let ws = redact_text("connect failed: wss://node.example.com/v2/WSSECRETTOKEN0001 closed");
+    assert!(!ws.contains("WSSECRETTOKEN0001"));
+
+    assert_eq!(redact_text("visit https:// now"), "visit https:// now");
+    assert_eq!(redact_text("plain message"), "plain message");
+}
+
+#[tokio::test]
+async fn check_does_not_leak_secret_in_error_output() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener); // free the port so the connection is refused deterministically
+
+    let report = run_check(CheckArgs {
+        rpc: format!("https://127.0.0.1:{port}/?api-key=FAKE_SECRET_123"),
+        json: false,
+        fail_on_warning: false,
+        timeout_ms: 1_500,
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(report.verdict, Verdict::Bad);
+    assert!(!report.rpc_url.contains("FAKE_SECRET_123"));
+    assert!(report
+        .checks
+        .iter()
+        .all(|check| !check.detail.contains("FAKE_SECRET_123")));
+
+    let human = render_human(&report);
+    let json = render_json(&report).unwrap();
+    assert!(!human.contains("FAKE_SECRET_123"));
+    assert!(!json.contains("FAKE_SECRET_123"));
 }
 
 fn with_genesis(
