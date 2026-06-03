@@ -1,0 +1,32 @@
+Solana Infra Doctor — RPC Compare
+
+Profile: bot
+
+RPC #1
+URL: https://api.mainnet-beta.solana.com/
+Verdict: WARNING
+Score: 20/100
+Slot: 312456740
+Slot lag: 65 slots behind
+Average latency: 820ms
+Failed checks: none
+Blockhash valid: yes
+Notes:
+- Average latency is high for latency-sensitive bot workloads.
+- Slot lag is high for slot-sensitive bot workloads.
+
+RPC #2
+URL: https://redacted-rpc.example.com/
+Verdict: GOOD
+Score: 90/100
+Slot: 312456805
+Slot lag: baseline
+Average latency: 90ms
+Failed checks: none
+Blockhash valid: yes
+
+Recommendation:
+Best RPC: RPC #2
+Worst RPC: RPC #1
+RPC #2 is recommended for bot workloads.
+Avoid RPC #1 for latency-sensitive or slot-sensitive workloads.

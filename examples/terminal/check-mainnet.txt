@@ -1,0 +1,22 @@
+Solana Infra Doctor
+===================
+RPC URL: https://api.mainnet-beta.solana.com/
+Verdict: GOOD
+Summary: all RPC readiness checks succeeded
+Average latency: 11ms
+
+Checks:
+
+Core:
+- getHealth                    OK       30ms  health is ok
+- getVersion                   OK        9ms  solana-core 4.0.0
+- getGenesisHash               OK        6ms  5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+- getSlot                      OK        5ms  slot 424059251
+
+Blockhash:
+- getLatestBlockhash           OK        9ms  HtNwARuM6rwjZHD9stRQmjJ7P4QXFe234UrCfRPdf5Ac
+- isBlockhashValid             OK        5ms  latest blockhash is valid
+
+Performance:
+- getRecentPerformanceSamples  OK       19ms  228252 transactions across 153 slots in 60s
+

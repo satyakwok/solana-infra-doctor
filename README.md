@@ -310,6 +310,25 @@ Profile: `indexer`
 | RPC #1 | `https://api.mainnet-beta.solana.com/` | `GOOD` | 90/100 | 347000000 | baseline | 142ms | none | yes |
 ```
 
+## Example Outputs
+
+Sample outputs are committed under [`examples/`](examples/) so you can inspect
+what the tool produces without running it first. They are illustrative
+diagnostic runs, not provider benchmarks.
+
+- [`examples/terminal/check-mainnet.txt`](examples/terminal/check-mainnet.txt)
+  — single-RPC `check` terminal output.
+- [`examples/terminal/compare-bot.txt`](examples/terminal/compare-bot.txt)
+  — `compare` terminal output for the `bot` profile.
+- [`examples/reports/compare-bot-report.md`](examples/reports/compare-bot-report.md)
+  — Markdown comparison report for the `bot` profile.
+- [`examples/reports/compare-indexer-report.md`](examples/reports/compare-indexer-report.md)
+  — Markdown comparison report for the `indexer` profile.
+
+These reports are useful as a readiness signal for RPC comparison, bot/indexer
+readiness review, CI discussion, and consulting-style diagnostics. Scores are
+deterministic heuristics, not a guarantee of provider behavior.
+
 ## Exit Codes
 
 | Code | Verdict | Meaning |
