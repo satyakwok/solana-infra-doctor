@@ -1,9 +1,9 @@
 [package]
 name = "solana-infra-doctor"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 rust-version = "1.76"
-description = "A Rust CLI for Solana RPC production-readiness diagnostics and comparison."
+description = "A Rust CLI for Solana RPC production-readiness diagnostics, comparison, and WebSocket checks."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/satyakwok/solana-infra-doctor"
 readme = "README.md"

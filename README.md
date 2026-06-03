@@ -4,16 +4,17 @@
 [![codecov](https://codecov.io/gh/satyakwok/solana-infra-doctor/branch/main/graph/badge.svg)](https://codecov.io/gh/satyakwok/solana-infra-doctor)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![Rust](https://img.shields.io/badge/rust-1.76%2B-orange.svg)](https://www.rust-lang.org/)
-[![Status](https://img.shields.io/badge/status-v0.1.1-blue.svg)](#current-limitations)
+[![Status](https://img.shields.io/badge/status-active-blue.svg)](#commands)
 
-**A Rust CLI for Solana RPC production-readiness diagnostics, comparison, and reports.**
+**A local-first Rust CLI for Solana RPC production-readiness diagnostics, comparison, WebSocket checks, and redaction-safe reports.**
 
 > Not just: *is this RPC online?*
-> But: *which RPC should I actually trust for this workload?*
+> But: *which Solana RPC endpoint should I actually trust for this workload?*
 
 Solana Infra Doctor diagnoses a Solana RPC endpoint, compares multiple
-endpoints, and produces terminal, JSON, and Markdown reports — so you can decide
-which RPC to trust for wallets, bots, indexers, CI, and production applications.
+endpoints, checks WebSocket readiness, and produces terminal, JSON, and Markdown
+reports — so you can decide which RPC to trust for bots, wallets, indexers, CI
+pipelines, and infrastructure reviews.
 
 - Diagnoses core JSON-RPC methods, blockhash freshness, slot data, latency, and
   performance samples.
@@ -27,26 +28,92 @@ which RPC to trust for wallets, bots, indexers, CI, and production applications.
 It is local-first, dependency-light, and built on raw HTTP JSON-RPC via
 `reqwest`.
 
-## Quick Start
+## Install
 
-Diagnose a single endpoint:
+```bash
+cargo install solana-infra-doctor
+```
+
+Upgrade:
+
+```bash
+cargo install solana-infra-doctor --force
+```
+
+Verify:
+
+```bash
+sol-doctor --version
+```
+
+(Or build from source — see [Install From Source](#install-from-source).)
+
+## Who Should Use This?
+
+| User | Why it matters |
+| --- | --- |
+| Bot builders | Latency and slot freshness can affect execution quality. |
+| Wallet/dApp backends | RPC reliability and blockhash readiness affect user-facing transactions. |
+| Indexer operators | Slot freshness and data availability matter for indexing pipelines. |
+| Infra teams | Compare providers before wiring endpoints into production systems. |
+| CI pipelines | Use JSON output for deterministic readiness checks. |
+| Consultants/auditors | Generate redaction-safe reports for RPC readiness reviews. |
+
+## Commands
+
+Check one RPC:
 
 ```bash
 sol-doctor check --rpc https://api.mainnet-beta.solana.com
 ```
 
-Compare endpoints for a workload and write a report:
+Compare multiple RPC endpoints:
 
 ```bash
 sol-doctor compare \
   --rpc https://api.mainnet-beta.solana.com \
-  --rpc https://api.devnet.solana.com \
+  --rpc https://solana-rpc.publicnode.com \
+  --profile bot
+```
+
+Generate a Markdown report:
+
+```bash
+sol-doctor compare \
+  --rpc https://api.mainnet-beta.solana.com \
+  --rpc https://solana-rpc.publicnode.com \
   --profile bot \
   --report rpc-report.md
 ```
 
+Check WebSocket readiness:
+
+```bash
+sol-doctor ws --rpc https://api.mainnet-beta.solana.com
+```
+
+JSON output (machine-readable, for CI):
+
+```bash
+sol-doctor compare \
+  --rpc https://api.mainnet-beta.solana.com \
+  --rpc https://solana-rpc.publicnode.com \
+  --profile bot \
+  --json
+```
+
 Prefer to look before running? See [Example Outputs](#example-outputs) for
 sample terminal output and Markdown reports.
+
+## What It Checks
+
+| Area | Checks |
+| --- | --- |
+| HTTP JSON-RPC | health, version, genesis hash, slot, blockhash, performance samples |
+| Compare mode | score, latency, slot freshness, failed checks, best/worst endpoint |
+| Network safety | rejects mixed-network comparisons by genesis hash |
+| WebSocket | URL derivation, connect, `slotSubscribe`, first slot notification, unsubscribe, close |
+| Output safety | redacts credentials and likely API keys in terminal, JSON, Markdown, and errors |
 
 ## Workload Profiles
 
@@ -74,9 +141,9 @@ Solana Infra Doctor answers those questions with a fast local diagnostic you can
 run before wiring an endpoint into application code, CI jobs, infrastructure
 automation, or operational runbooks.
 
-## What It Checks Today
+## Check Details (HTTP JSON-RPC)
 
-`sol-doctor check` currently runs these JSON-RPC checks:
+`sol-doctor check` runs these JSON-RPC checks:
 
 | Category | Method | Purpose |
 | --- | --- | --- |
@@ -89,7 +156,7 @@ automation, or operational runbooks.
 | Performance | `getRecentPerformanceSamples` | Confirms recent performance sample data is available. |
 
 The CLI measures latency for each method and calculates an average latency
-verdict using these v0.1 thresholds:
+verdict using these thresholds:
 
 - `GOOD`: average latency is less than or equal to 500ms.
 - `WARNING`: average latency is greater than 500ms and less than or equal to
@@ -425,6 +492,31 @@ Solana Infra Doctor redacts credentials and likely API keys from displayed RPC
 URLs, error messages, JSON output, and Markdown reports. Avoid sharing raw
 private RPC URLs.
 
+## Practical Use Cases
+
+Solana Infra Doctor can produce redaction-safe diagnostic artifacts for:
+
+- RPC provider comparison before choosing an endpoint
+- bot/indexer readiness reviews
+- wallet/backend RPC checks
+- CI readiness checks (JSON output, exit codes)
+- short technical RPC audit reports
+
+For a worked example of turning the CLI output into a shareable report, see
+[`docs/rpc-readiness-report.md`](docs/rpc-readiness-report.md).
+
+This repository does not provide hosted monitoring, paid SaaS, or SLA
+guarantees. It is a local diagnostic tool.
+
+## What This Is Not
+
+- Not a hosted monitoring service
+- Not an SLA provider
+- Not a replacement for provider observability
+- Not a trading performance guarantee
+- Not a dashboard or SaaS product
+- Not affiliated with or endorsed by Solana Foundation
+
 ## Coverage Policy
 
 CI enforces at least `95%` line coverage with `cargo llvm-cov`. Coverage reports
@@ -433,13 +525,25 @@ report artifact is not committed.
 
 ## Roadmap
 
-- Add optional cluster expectation checks.
-- Refine endpoint comparison scoring as more real-world diagnostics are added.
-- Add richer rate-limit and provider-degradation diagnostics.
-- Add transaction simulation readiness checks without pulling heavy SDK
-  dependencies too early.
-- Add machine-readable output refinements for CI and infrastructure automation.
-- Consider parallel check execution once the v0.1 behavior is stable.
+Grounded in usefulness, not feature count.
+
+**Near-term**
+
+- Repeat sampling mode for better p50/p95 latency and short-window error-rate
+  signals.
+- Richer report templates.
+- A GitHub Action wrapper for CI.
+- More example reports.
+
+**Later**
+
+- Optional local benchmark history file.
+- A provider comparison playbook.
+- Install/distribution improvements.
+
+**Not now**
+
+- Hosted dashboard, SaaS, user accounts, database, alerting, or a paid API.
 
 ## License
 

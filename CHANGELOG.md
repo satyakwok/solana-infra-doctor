@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2 - Unreleased
+
+- Strengthen README positioning for Solana RPC readiness diagnostics.
+- Document WebSocket diagnostics and redaction-safe reporting more clearly.
+- Add practical use cases for RPC provider comparison, CI checks, and technical reports.
+- Add a docs guide for producing an RPC readiness report.
+- Update the package description and CLI help text to mention WebSocket checks.
+- Fix stale README wording from earlier releases.
+
 ## 0.2.1 - 2026-06-03
 
 - Deduplicate thiserror dependency versions by updating the direct dependency to thiserror 2.
