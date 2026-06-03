@@ -7,13 +7,21 @@
 
 A lightweight Rust CLI for diagnosing Solana RPC and infrastructure health.
 
-Solana Infra Doctor checks whether a Solana RPC endpoint is online and usable for builders, bots, wallets, indexers, and production applications. It is intentionally small, dependency-light, and built on raw HTTP JSON-RPC via `reqwest`.
+Solana Infra Doctor checks whether a Solana RPC endpoint is online and usable
+for builders, bots, wallets, indexers, and production applications. It is
+intentionally small, dependency-light, and built on raw HTTP JSON-RPC via
+`reqwest`.
 
 ## Why This Exists
 
-A Solana RPC endpoint can accept connections while still being unsuitable for production workloads. Basic uptime checks do not tell you whether core RPC calls work, recent blockhashes are usable, or the endpoint can return recent performance data.
+A Solana RPC endpoint can accept connections while still being unsuitable for
+production workloads. Basic uptime checks do not tell you whether core RPC
+calls work, recent blockhashes are usable, or the endpoint can return recent
+performance data.
 
-Solana Infra Doctor gives developers a fast local diagnostic that can be used before wiring an endpoint into application code, CI jobs, infrastructure automation, or operational runbooks.
+Solana Infra Doctor gives developers a fast local diagnostic that can be used
+before wiring an endpoint into application code, CI jobs, infrastructure
+automation, or operational runbooks.
 
 ## What It Checks Today
 
@@ -22,17 +30,19 @@ Solana Infra Doctor gives developers a fast local diagnostic that can be used be
 | Category | Method | Purpose |
 | --- | --- | --- |
 | Core | `getHealth` | Confirms the node reports healthy status. |
-| Core | `getVersion` | Confirms the endpoint can return validator software version metadata. |
+| Core | `getVersion` | Confirms validator software version metadata is available. |
 | Core | `getGenesisHash` | Confirms the endpoint can identify its cluster genesis hash. |
 | Core | `getSlot` | Confirms the endpoint can return current slot data. |
 | Blockhash | `getLatestBlockhash` | Confirms the endpoint can produce a recent blockhash. |
 | Blockhash | `isBlockhashValid` | Confirms the latest returned blockhash is valid. |
 | Performance | `getRecentPerformanceSamples` | Confirms recent performance sample data is available. |
 
-The CLI measures latency for each method and calculates an average latency verdict using these v0.1 thresholds:
+The CLI measures latency for each method and calculates an average latency
+verdict using these v0.1 thresholds:
 
 - `GOOD`: average latency is less than or equal to 500ms.
-- `WARNING`: average latency is greater than 500ms and less than or equal to 1500ms.
+- `WARNING`: average latency is greater than 500ms and less than or equal to
+  1500ms.
 - `BAD`: average latency is greater than 1500ms or repeated timeouts occur.
 
 Error kinds are classified as:
@@ -84,7 +94,8 @@ Make warning behavior explicit for CI:
 sol-doctor check --rpc https://api.mainnet-beta.solana.com --fail-on-warning
 ```
 
-`--fail-on-warning` does not change the exit code mapping. `WARNING` still exits with code `1`; the output makes the CI policy explicit.
+`--fail-on-warning` does not change the exit code mapping. `WARNING` still
+exits with code `1`; the output makes the CI policy explicit.
 
 ## Human Output Example
 
@@ -168,15 +179,18 @@ Performance:
 - Checks run sequentially in v0.1.
 - Verdicts are deterministic but intentionally conservative.
 - No Solana SDK dependencies are used yet.
-- No Token Program, Token-2022, transaction simulation, account indexing, or endpoint comparison checks yet.
-- No Prometheus exporter, dashboard, hosted cloud service, marketplace, token, NFT, points, airdrop, or governance features.
+- No Token Program, Token-2022, transaction simulation, account indexing, or
+  endpoint comparison checks yet.
+- No Prometheus exporter, dashboard, hosted cloud service, marketplace, token,
+  NFT, points, airdrop, or governance features.
 
 ## Roadmap
 
 - Add optional cluster expectation checks.
 - Add endpoint comparison mode.
 - Add richer rate-limit and provider-degradation diagnostics.
-- Add transaction simulation readiness checks without pulling heavy SDK dependencies too early.
+- Add transaction simulation readiness checks without pulling heavy SDK
+  dependencies too early.
 - Add machine-readable output refinements for CI and infrastructure automation.
 - Consider parallel check execution once the v0.1 behavior is stable.
 
@@ -193,4 +207,5 @@ Copyright 2026 Satya Kwok.
 
 ## Disclaimer
 
-Solana Infra Doctor is an independent open-source tool and is not affiliated with or endorsed by Solana Foundation.
+Solana Infra Doctor is an independent open-source tool and is not affiliated
+with or endorsed by Solana Foundation.
