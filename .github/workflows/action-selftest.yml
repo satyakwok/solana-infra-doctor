@@ -1,0 +1,30 @@
+# Exercise the composite GitHub Action against a public RPC so the action stays
+# working. Runs on main, on PRs that touch the action, and on demand.
+name: Action self-test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "action.yml"
+      - ".github/workflows/action-selftest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: Run action
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run sol-doctor check against a public RPC
+        uses: ./
+        with:
+          rpc: https://api.mainnet-beta.solana.com
+          verbose: "true"

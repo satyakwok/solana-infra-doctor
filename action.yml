@@ -1,0 +1,94 @@
+name: "Solana Infra Doctor"
+description: "Diagnose Solana RPC production readiness in CI and gate the job on the verdict (exit 0 GOOD, 1 WARNING, 2 BAD, 3 UNKNOWN)."
+author: "satyakwok"
+branding:
+  icon: "activity"
+  color: "purple"
+
+inputs:
+  command:
+    description: "Subcommand to run: check, ws, or compare."
+    required: false
+    default: "check"
+  rpc:
+    description: "RPC endpoint URL (check/ws). For compare, pass the URLs through `args` instead."
+    required: false
+    default: ""
+  fail-on-warning:
+    description: "Treat a WARNING verdict as a failure (check)."
+    required: false
+    default: "false"
+  samples:
+    description: "Number of latency samples to probe (check)."
+    required: false
+    default: ""
+  timeout-ms:
+    description: "Per-request timeout in milliseconds."
+    required: false
+    default: ""
+  json:
+    description: "Emit machine-readable JSON."
+    required: false
+    default: "false"
+  verbose:
+    description: "Show full per-check detail in human output."
+    required: false
+    default: "false"
+  version:
+    description: "sol-doctor version to install (default: latest published)."
+    required: false
+    default: ""
+  args:
+    description: "Additional raw arguments appended to the command (e.g. extra --rpc for compare)."
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    # Installs the prebuilt cargo-binstall binary (no compile). cargo binstall
+    # then fetches the prebuilt sol-doctor binary when available and transparently
+    # falls back to compiling from source otherwise.
+    - name: Install cargo-binstall
+      uses: cargo-bins/cargo-binstall@main
+
+    - name: Install sol-doctor
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        if [ -n "$VERSION" ]; then
+          cargo binstall -y "solana-infra-doctor@$VERSION"
+        else
+          cargo binstall -y solana-infra-doctor
+        fi
+
+    # Inputs are passed via the environment (never interpolated into the script
+    # body) so a hostile input cannot inject shell commands.
+    - name: Run sol-doctor
+      shell: bash
+      env:
+        COMMAND: ${{ inputs.command }}
+        RPC: ${{ inputs.rpc }}
+        FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}
+        SAMPLES: ${{ inputs.samples }}
+        TIMEOUT_MS: ${{ inputs.timeout-ms }}
+        JSON: ${{ inputs.json }}
+        VERBOSE: ${{ inputs.verbose }}
+        EXTRA_ARGS: ${{ inputs.args }}
+      run: |
+        set -euo pipefail
+        cmd=(sol-doctor "$COMMAND")
+        if [ -n "$RPC" ]; then cmd+=(--rpc "$RPC"); fi
+        if [ "$FAIL_ON_WARNING" = "true" ]; then cmd+=(--fail-on-warning); fi
+        if [ "$JSON" = "true" ]; then cmd+=(--json); fi
+        if [ "$VERBOSE" = "true" ]; then cmd+=(--verbose); fi
+        if [ -n "$SAMPLES" ]; then cmd+=(--samples "$SAMPLES"); fi
+        if [ -n "$TIMEOUT_MS" ]; then cmd+=(--timeout-ms "$TIMEOUT_MS"); fi
+        if [ -n "$EXTRA_ARGS" ]; then
+          read -ra extra <<< "$EXTRA_ARGS"
+          cmd+=("${extra[@]}")
+        fi
+        printf '+ %s\n' "${cmd[*]}"
+        "${cmd[@]}"

@@ -592,6 +592,26 @@ deterministic heuristics, not a guarantee of provider behavior.
 | `2` | `BAD` | URL is invalid, endpoint is unreachable, critical checks failed, repeated timeouts occurred, or latency is too high. |
 | `3` | `UNKNOWN` or internal error | Not enough data for a reliable verdict, or an unexpected internal error occurred. |
 
+## Use in CI (GitHub Action)
+
+Gate a workflow on RPC readiness with the bundled composite action — it installs
+`sol-doctor` and runs it, so the job fails when the endpoint is not ready:
+
+```yaml
+- name: Check Solana RPC readiness
+  uses: satyakwok/solana-infra-doctor@v1
+  with:
+    rpc: https://api.mainnet-beta.solana.com
+    fail-on-warning: "true"
+```
+
+Inputs: `command` (`check`/`ws`/`compare`, default `check`), `rpc`,
+`fail-on-warning`, `samples`, `timeout-ms`, `json`, `verbose`, `version`, and
+`args` (raw passthrough — e.g. extra `--rpc` for `compare`). The job's success
+follows the [exit codes](#exit-codes) above, so a `BAD` endpoint (or `WARNING`
+with `fail-on-warning`) fails the step. Pin a released tag (e.g. `@v0.9.0`) for
+reproducible runs.
+
 ## Current Limitations
 
 - `check` and `compare` use HTTP JSON-RPC; `sol-doctor ws` covers slot-subscription
