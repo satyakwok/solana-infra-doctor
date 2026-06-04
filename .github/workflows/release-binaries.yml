@@ -1,0 +1,63 @@
+# Build prebuilt `sol-doctor` binaries and attach them to the GitHub Release.
+#
+# Triggers on a pushed `v*` tag (the release tag created after a crates.io
+# publish) so each release gains downloadable binaries and `cargo binstall`
+# support. Can also be run manually against an existing tag via workflow_dispatch.
+name: Release binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+# Least privilege: upload assets to the release for the current tag.
+permissions:
+  contents: write
+
+jobs:
+  upload:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Set up the cross linker (and musl) for the non-native Linux targets.
+      - name: Set up cross toolchain
+        if: runner.os == 'Linux'
+        uses: taiki-e/setup-cross-toolchain-action@v1
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Build and upload binary
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: sol-doctor
+          target: ${{ matrix.target }}
+          archive: sol-doctor-$target
+          tar: unix
+          zip: windows
+          checksum: sha256
+          include: README.md,LICENSE-MIT,LICENSE-APACHE,CHANGELOG.md
+          token: ${{ secrets.GITHUB_TOKEN }}

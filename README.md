@@ -53,15 +53,28 @@ the [CLI Output Guide](docs/cli-output.md) and
 
 ## Install
 
+### Prebuilt binary (no Rust toolchain)
+
+Each release attaches prebuilt binaries for Linux (gnu + static musl), macOS
+(Intel + Apple Silicon), and Windows. With
+[`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall):
+
+```bash
+cargo binstall solana-infra-doctor
+```
+
+Or download the archive for your platform from the
+[latest release](https://github.com/satyakwok/solana-infra-doctor/releases/latest)
+(named `sol-doctor-<target>`), extract it, and put `sol-doctor` on your `PATH`.
+
+### From crates.io (compiles from source)
+
 ```bash
 cargo install solana-infra-doctor
 ```
 
-Upgrade:
-
-```bash
-cargo install solana-infra-doctor --force
-```
+Upgrade with `cargo install solana-infra-doctor --force` (or
+`cargo binstall --force solana-infra-doctor`).
 
 Verify:
 
