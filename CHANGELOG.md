@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 - 2026-06-04
 
 - Add two new diagnostic checks: **`getBlockTime`** (on the latest finalized
   slot) yields how far the finalized chain tip lags wall clock — a **freshness**
