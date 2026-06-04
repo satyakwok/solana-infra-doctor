@@ -29,27 +29,47 @@ pub struct Palette {
 }
 
 impl Palette {
+    /// Construct a palette that is on (`true`) or a no-op (`false`).
     pub fn new(enabled: bool) -> Self {
         Self { enabled }
     }
 
-    /// Resolve whether color should be applied from a [`ColorChoice`], whether
-    /// stdout is a terminal, whether `NO_COLOR` is set, and whether output is
-    /// machine-readable JSON (which is never colored).
+    /// Resolve whether color should be applied.
+    ///
+    /// In `auto` mode color is enabled only on a real terminal that has not
+    /// opted out: `NO_COLOR` must be unset, `TERM` must not be `dumb`, and the
+    /// output must not be machine-readable JSON. `always` forces color for any
+    /// non-JSON output (useful for capturing screenshots), and `never` disables
+    /// it entirely. JSON is never colored regardless of choice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use solana_infra_doctor::color::{ColorChoice, Palette};
+    ///
+    /// // auto: a real terminal with no opt-out gets color
+    /// assert!(Palette::resolve(ColorChoice::Auto, true, false, false, false).enabled());
+    /// // auto: piped output (not a terminal) stays plain
+    /// assert!(!Palette::resolve(ColorChoice::Auto, false, false, false, false).enabled());
+    /// // JSON is never colored
+    /// assert!(!Palette::resolve(ColorChoice::Always, true, false, false, true).enabled());
+    /// ```
     pub fn resolve(
         choice: ColorChoice,
         stdout_is_terminal: bool,
         no_color: bool,
+        term_dumb: bool,
         json: bool,
     ) -> Self {
         let enabled = match choice {
             ColorChoice::Always => !json,
             ColorChoice::Never => false,
-            ColorChoice::Auto => stdout_is_terminal && !no_color && !json,
+            ColorChoice::Auto => stdout_is_terminal && !no_color && !term_dumb && !json,
         };
         Self { enabled }
     }
 
+    /// Whether this palette emits ANSI codes.
     pub fn enabled(self) -> bool {
         self.enabled
     }
@@ -79,10 +99,12 @@ impl Palette {
         self.sgr(MUTED, text)
     }
 
+    /// Bold text.
     pub fn bold(self, text: &str) -> String {
         self.sgr("1", text)
     }
 
+    /// Dimmed (muted gray) text.
     pub fn dim(self, text: &str) -> String {
         self.sgr(MUTED, text)
     }
@@ -98,9 +120,14 @@ impl Palette {
         self.sgr(&format!("1;{color}"), &verdict.to_string())
     }
 
-    /// Success marker (e.g. `OK`): bold green.
+    /// Success marker (e.g. `PASS`): bold green.
     pub fn ok(self, text: &str) -> String {
         self.sgr(&format!("1;{GOOD}"), text)
+    }
+
+    /// Caution marker (e.g. `WARN`): bold amber.
+    pub fn warn(self, text: &str) -> String {
+        self.sgr(&format!("1;{WARNING}"), text)
     }
 
     /// Failure marker (e.g. `FAIL`): bold red.
@@ -122,8 +149,11 @@ impl Palette {
 /// When to apply color, mirroring the common `--color` convention.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum ColorChoice {
+    /// Color only on a terminal that has not opted out (the default).
     Auto,
+    /// Always color non-JSON output.
     Always,
+    /// Never emit color.
     Never,
 }
 
@@ -175,12 +205,14 @@ mod tests {
 
     #[test]
     fn resolution_rules() {
-        assert!(Palette::resolve(ColorChoice::Always, false, false, false).enabled());
-        assert!(!Palette::resolve(ColorChoice::Always, true, false, true).enabled()); // json
-        assert!(!Palette::resolve(ColorChoice::Never, true, false, false).enabled());
-        assert!(Palette::resolve(ColorChoice::Auto, true, false, false).enabled());
-        assert!(!Palette::resolve(ColorChoice::Auto, false, false, false).enabled()); // not tty
-        assert!(!Palette::resolve(ColorChoice::Auto, true, true, false).enabled());
-        // NO_COLOR
+        // (choice, is_terminal, no_color, term_dumb, json)
+        assert!(Palette::resolve(ColorChoice::Always, false, false, false, false).enabled());
+        assert!(!Palette::resolve(ColorChoice::Always, true, false, false, true).enabled()); // json
+        assert!(!Palette::resolve(ColorChoice::Never, true, false, false, false).enabled());
+        assert!(Palette::resolve(ColorChoice::Auto, true, false, false, false).enabled());
+        assert!(!Palette::resolve(ColorChoice::Auto, false, false, false, false).enabled()); // not tty
+        assert!(!Palette::resolve(ColorChoice::Auto, true, true, false, false).enabled()); // NO_COLOR
+        assert!(!Palette::resolve(ColorChoice::Auto, true, false, true, false).enabled());
+        // TERM=dumb
     }
 }

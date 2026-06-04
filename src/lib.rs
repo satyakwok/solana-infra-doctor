@@ -16,6 +16,9 @@
 //! - [`rpc`] — the JSON-RPC client, endpoint parsing, and wire models.
 //! - [`redact`] — credential/API-key redaction for safe output.
 //! - [`report`], [`latency`], [`verdict`], [`error`] — output and shared models.
+//! - [`output`] — shared human-terminal presentation helpers (status vocabulary,
+//!   unit formatting, tables); not used by JSON or Markdown output.
+//! - [`color`] — TTY-aware ANSI styling for human output.
 //! - [`cli`] — argument types shared with the binary frontend.
 //!
 //! ## Primary entrypoints
@@ -44,6 +47,7 @@ pub mod color;
 pub mod compare;
 pub mod error;
 pub mod latency;
+pub mod output;
 pub mod redact;
 pub mod report;
 pub mod rpc;

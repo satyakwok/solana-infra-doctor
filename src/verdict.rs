@@ -1,5 +1,10 @@
+//! The overall readiness verdict shared by every command, and its mapping to a
+//! process exit code.
+
 use serde::{Deserialize, Serialize};
 
+/// The overall readiness verdict for a command. Serializes as an uppercase
+/// string (`GOOD`, `WARNING`, `BAD`, `UNKNOWN`) and maps to the process exit code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Verdict {
@@ -10,6 +15,8 @@ pub enum Verdict {
 }
 
 impl Verdict {
+    /// The process exit code for this verdict: `0` GOOD, `1` WARNING, `2` BAD,
+    /// `3` UNKNOWN.
     pub fn exit_code(self) -> i32 {
         match self {
             Self::Good => 0,

@@ -28,25 +28,26 @@ pipelines, and infrastructure reviews.
 It is local-first, dependency-light, and built on raw HTTP JSON-RPC via
 `reqwest`.
 
-## Demo
+## CLI Preview
+
+Compare two endpoints for a workload (`sol-doctor compare --profile bot`) — the
+faster endpoint is not automatically the winner when it serves staler slots:
+
+![sol-doctor compare summary table comparing two mainnet RPC endpoints for the bot profile](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/images/cli/compare.png)
 
 Diagnose a single endpoint (`sol-doctor check`):
 
-![sol-doctor check output](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/assets/check.png)
-
-Compare two endpoints for a workload (`sol-doctor compare --profile bot`) — note
-how the faster endpoint is not automatically the winner when it serves staler
-slots:
-
-![sol-doctor compare output](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/assets/compare.png)
+![sol-doctor check readiness summary for a mainnet RPC endpoint](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/images/cli/check.png)
 
 Check WebSocket realtime readiness (`sol-doctor ws`):
 
-![sol-doctor ws output](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/assets/ws.png)
+![sol-doctor ws readiness summary showing connect, subscribe, and first notification steps](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/images/cli/ws.png)
 
-Screenshots are real runs against public endpoints, captured with color
-enabled; values vary per run. See [Color output](#color-output) for how color is
-controlled.
+Screenshots are real runs against public endpoints. Values vary by time, region,
+and endpoint conditions. They are diagnostic snapshots, not provider guarantees.
+The default view is concise; run with `--verbose` for full per-check detail. See
+the [CLI Output Guide](docs/cli-output.md) and
+[how these screenshots are made](docs/readme-screenshots.md).
 
 ## Install
 
@@ -214,7 +215,13 @@ Check an RPC endpoint:
 sol-doctor check --rpc https://api.mainnet-beta.solana.com
 ```
 
-Emit JSON:
+Show full per-check detail (full redacted URL, per-method latencies, full hashes):
+
+```bash
+sol-doctor check --rpc https://api.mainnet-beta.solana.com --verbose
+```
+
+Emit JSON (for automation — prefer this over parsing the human text):
 
 ```bash
 sol-doctor check --rpc https://api.mainnet-beta.solana.com --json
@@ -305,8 +312,8 @@ emit JSON with `--json`.
 ### Color output
 
 Human output is colorized when stdout is a terminal. Color is **semantic**:
-verdicts and `OK`/`FAIL` markers carry status colors, labels are muted, and
-section titles are emphasized. Control it with the global `--color` flag
+verdicts and `PASS`/`WARN`/`FAIL` markers carry status colors, labels are muted,
+and section titles are emphasized. Control it with the global `--color` flag
 (`check`, `compare`, and `ws` all accept it):
 
 ```bash
@@ -315,77 +322,88 @@ sol-doctor check --rpc https://api.mainnet-beta.solana.com --color always  # for
 sol-doctor check --rpc https://api.mainnet-beta.solana.com --color never   # disable color
 ```
 
-`--json` output is never colorized, and the [`NO_COLOR`](https://no-color.org/)
-environment variable is honored under `--color auto`. When color is off, the
-output is byte-for-byte identical to the uncolored output.
+`--json` output is never colorized; the [`NO_COLOR`](https://no-color.org/)
+environment variable and `TERM=dumb` are honored under `--color auto`. When color
+is off, the output is byte-for-byte identical to the uncolored output. See the
+[CLI Output Guide](docs/cli-output.md) for the full output reference.
 
 ## Human Output Example
 
-This is a real run against `https://api.mainnet-beta.solana.com` (on a terminal
-this output is colorized; see the [Demo](#demo) screenshots):
+A real run against `https://api.mainnet-beta.solana.com`. The default view is
+concise (on a terminal it is colorized; see the [CLI Preview](#cli-preview)):
 
 ```text
-Solana Infra Doctor
-===================
-RPC URL: https://api.mainnet-beta.solana.com/
-Verdict: GOOD
-Summary: all RPC readiness checks succeeded
-Average latency: 12ms
+Solana Infra Doctor · RPC Readiness
 
-Checks:
+Target
+Endpoint   api.mainnet-beta.solana.com
 
-Core:
-- getHealth                    OK       32ms  health is ok
-- getVersion                   OK        5ms  solana-core 4.0.0
-- getGenesisHash               OK        8ms  5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
-- getSlot                      OK        4ms  slot 424135210
+Result
+GOOD      All RPC readiness checks passed
+Latency   23 ms average
+Checks    7 passed · 0 failed
 
-Blockhash:
-- getLatestBlockhash           OK        4ms  6GWATk9t7puKX48hcMW2fPiZ3HvCUV8VpgtgYwVykv3W
-- isBlockhashValid             OK        6ms  latest blockhash is valid
+Checks
+Category       Status    Summary
+Core           PASS      4 / 4
+Blockhash      PASS      2 / 2
+Performance    PASS      1 / 1
 
-Performance:
-- getRecentPerformanceSamples  OK       27ms  204903 transactions across 148 slots in 60s
+Tip: run with --verbose to see full details.
+```
+
+Run with `--verbose` for full per-check detail (full redacted URL, per-method
+latencies, full hashes):
+
+```text
+Solana Infra Doctor · RPC Readiness
+
+Target
+RPC URL   https://api.mainnet-beta.solana.com/
+
+Result
+GOOD      All RPC readiness checks passed
+Latency   22 ms average
+Checks    7 passed · 0 failed
+
+Checks
+
+Core
+- getHealth       PASS  86 ms  health is ok
+- getVersion      PASS  13 ms  solana-core 4.0.0
+- getGenesisHash  PASS  14 ms  5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+- getSlot         PASS  11 ms  slot 424147058
+
+Blockhash
+- getLatestBlockhash  PASS  11 ms  4fzZUYN9uQR6HLTj5faRtJjbiXaLxUfz9k1T2N5ATELG
+- isBlockhashValid    PASS  3 ms   latest blockhash is valid
+
+Performance
+- getRecentPerformanceSamples  PASS  19 ms  234389 transactions across 154 slots in 60s
 ```
 
 ## Compare Output Example
 
 A real `bot`-profile comparison of two public mainnet endpoints. Note that the
-lower-latency endpoint (RPC #1) is not the winner: RPC #2 serves fresher slots,
-which the `bot` profile weighs more heavily.
+lower-latency endpoint (#1) is not the winner: #2 serves fresher slots, which the
+`bot` profile weighs more heavily. (Run with `--verbose` for full per-endpoint
+detail.)
 
 ```text
-Solana Infra Doctor — RPC Compare
+Solana Infra Doctor · RPC Comparison
 
 Profile: bot
 
-RPC #1
-URL: https://api.mainnet-beta.solana.com/
-Genesis: 5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
-Verdict: GOOD
-Score: 83/100
-Slot: 424135210
-Slot lag: 32 slots behind
-Average latency: 12ms
-Failed checks: none
-Blockhash valid: yes
+RPC   Endpoint                      Verdict   Score    Latency   Slot lag
+#1    api.mainnet-beta.solana.com   GOOD      83/100   20 ms     32 behind
+#2    solana-rpc.publicnode.com     GOOD      90/100   98 ms     baseline
 
-RPC #2
-URL: https://solana-rpc.publicnode.com/
-Genesis: 5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
-Verdict: GOOD
-Score: 90/100
-Slot: 424135242
-Slot lag: baseline
-Average latency: 99ms
-Failed checks: none
-Blockhash valid: yes
-
-Recommendation:
-Best RPC: RPC #2
-Worst RPC: RPC #1
+Recommendation
+Best RPC: #2 · solana-rpc.publicnode.com
 RPC #2 is recommended for bot workloads.
 RPC #1 has lower latency, but RPC #2 is fresher. For bot workloads, slot freshness may matter more than raw HTTP latency.
+
+Tip: run with --verbose to see full details per endpoint.
 ```
 
 ## JSON Output Example
@@ -394,7 +412,7 @@ RPC #1 has lower latency, but RPC #2 is fresher. For bot workloads, slot freshne
 {
   "verdict": "GOOD",
   "rpc_url": "https://api.mainnet-beta.solana.com/",
-  "summary": "all RPC readiness checks succeeded",
+  "summary": "All RPC readiness checks passed",
   "average_latency_ms": 42,
   "fail_on_warning": false,
   "checks": [

@@ -1,6 +1,10 @@
+//! Command-line argument types, shared between the `sol-doctor` binary and the
+//! library so an embedding frontend can construct the same inputs.
+
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
+/// Top-level CLI: a subcommand plus the global `--color` and `--verbose` flags.
 #[derive(Debug, Parser)]
 #[command(
     name = "sol-doctor",
@@ -8,14 +12,22 @@ use std::path::PathBuf;
     about = "A Rust CLI for Solana RPC production-readiness diagnostics, comparison, and WebSocket checks."
 )]
 pub struct Cli {
+    /// The subcommand to run.
     #[command(subcommand)]
     pub command: Commands,
 
     /// When to colorize human output (JSON output is never colored).
     #[arg(long, global = true, value_enum, default_value_t = crate::color::ColorChoice::Auto)]
     pub color: crate::color::ColorChoice,
+
+    /// Show full per-check details in human output (full redacted URLs, hashes,
+    /// per-method latencies, and notes). Affects human output only; `--json`
+    /// output is unchanged and takes precedence when both are set.
+    #[arg(short, long, global = true)]
+    pub verbose: bool,
 }
 
+/// The available subcommands.
 #[derive(Debug, Subcommand)]
 pub enum Commands {
     /// Check whether a Solana RPC endpoint is usable.
@@ -28,6 +40,7 @@ pub enum Commands {
     Ws(WsArgs),
 }
 
+/// Arguments for the `ws` subcommand.
 #[derive(Debug, Args, Clone)]
 pub struct WsArgs {
     /// Solana RPC HTTP URL used to derive the WebSocket endpoint.
@@ -47,6 +60,7 @@ pub struct WsArgs {
     pub timeout_ms: u64,
 }
 
+/// Arguments for the `check` subcommand.
 #[derive(Debug, Args, Clone)]
 pub struct CheckArgs {
     /// Solana RPC HTTP URL to diagnose.
@@ -66,6 +80,7 @@ pub struct CheckArgs {
     pub timeout_ms: u64,
 }
 
+/// Arguments for the `compare` subcommand.
 #[derive(Debug, Args, Clone)]
 pub struct CompareArgs {
     /// Solana RPC HTTP URLs to compare. Provide at least two.
@@ -89,6 +104,7 @@ pub struct CompareArgs {
     pub timeout_ms: u64,
 }
 
+/// The workload profile that drives `compare` scoring and recommendations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum CompareProfile {
     General,
@@ -99,6 +115,7 @@ pub enum CompareProfile {
 }
 
 impl CompareProfile {
+    /// The lowercase profile name (`general`, `wallet`, `bot`, `indexer`, `ci`).
     pub fn label(self) -> &'static str {
         match self {
             Self::General => "general",

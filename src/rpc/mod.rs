@@ -1,3 +1,7 @@
+//! The HTTP JSON-RPC client, endpoint parsing/validation, and wire models. URLs
+//! are treated as secret-bearing: they are redacted before appearing in any
+//! output, `Debug`, or error.
+
 use crate::error::AppError;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
@@ -7,6 +11,8 @@ use url::Url;
 pub mod models;
 pub use models::*;
 
+/// A validated `http`/`https` RPC endpoint. Its `Debug` is redacted so credentials
+/// in the URL never leak through logging or panics.
 #[derive(Clone)]
 pub struct RpcEndpoint {
     url: Url,
@@ -24,6 +30,8 @@ impl std::fmt::Debug for RpcEndpoint {
 }
 
 impl RpcEndpoint {
+    /// Parse and validate an RPC URL, rejecting non-`http(s)` schemes and
+    /// hostless URLs.
     pub fn parse(input: &str) -> Result<Self, AppError> {
         let url = Url::parse(input).map_err(|error| AppError::InvalidRpcUrl {
             reason: error.to_string(),
@@ -47,15 +55,18 @@ impl RpcEndpoint {
         Ok(Self { url })
     }
 
+    /// The underlying parsed URL.
     pub fn as_url(&self) -> &Url {
         &self.url
     }
 
+    /// The URL with any credentials or likely API key redacted, safe to display.
     pub fn redacted(&self) -> String {
         crate::redact::redact_url(&self.url)
     }
 }
 
+/// A `reqwest`-backed JSON-RPC client bound to a single [`RpcEndpoint`].
 #[derive(Debug, Clone)]
 pub struct RpcClient {
     endpoint: RpcEndpoint,
@@ -63,6 +74,7 @@ pub struct RpcClient {
 }
 
 impl RpcClient {
+    /// Build a client for `endpoint` with the given per-request `timeout`.
     pub fn new(endpoint: RpcEndpoint, timeout: Duration) -> Result<Self, AppError> {
         let client = Client::builder()
             .timeout(timeout)
@@ -72,6 +84,7 @@ impl RpcClient {
         Ok(Self { endpoint, client })
     }
 
+    /// Send a JSON-RPC `request` and deserialize the typed response body.
     pub async fn call<T>(
         &self,
         request: &JsonRpcRequest,

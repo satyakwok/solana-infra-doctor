@@ -1,16 +1,25 @@
 //! Human-readable terminal, JSON, and Markdown rendering for compare reports.
 
 use super::CompareReport;
-use crate::{color::Palette, error::AppError};
+use crate::{
+    color::Palette,
+    error::AppError,
+    output::{
+        style::{self, endpoint_label},
+        table::{self, Cell},
+    },
+};
 use std::fs;
 
-pub fn render_human(report: &CompareReport) -> String {
-    render_human_colored(report, Palette::new(false))
-}
-
-pub fn render_human_colored(report: &CompareReport, palette: Palette) -> String {
+/// Render the human-readable `compare` report.
+///
+/// The default view is a one-row-per-endpoint summary table (verdict, score,
+/// latency, slot lag) plus the recommendation. `verbose` expands each endpoint
+/// into a full detail block (full redacted URL, genesis hash, failed checks,
+/// notes). `verbose` affects human output only.
+pub fn render_human(report: &CompareReport, palette: Palette, verbose: bool) -> String {
     let mut output = String::new();
-    output.push_str(&palette.title("Solana Infra Doctor — RPC Compare"));
+    output.push_str(&palette.title("Solana Infra Doctor · RPC Comparison"));
     output.push_str("\n\n");
     output.push_str(&format!(
         "{} {}\n\n",
@@ -19,64 +28,106 @@ pub fn render_human_colored(report: &CompareReport, palette: Palette) -> String 
     ));
 
     if report.network_mismatch {
-        output.push_str(&palette.label("Cannot compare endpoints from different Solana networks."));
+        output.push_str(&palette.warn("Endpoints are on different Solana networks."));
         output.push('\n');
-        output.push_str(&palette.label(
-            "Endpoints returned different genesis hashes; ranking and slot lag are disabled.",
-        ));
+        output.push_str(
+            &palette.dim(
+                "Genesis hashes differ; ranking and slot lag are disabled for this comparison.",
+            ),
+        );
         output.push_str("\n\n");
     }
 
+    if verbose {
+        render_endpoints_verbose(report, palette, &mut output);
+    } else {
+        render_endpoints_summary(report, palette, &mut output);
+    }
+
+    output.push_str(&palette.heading("Recommendation"));
+    output.push('\n');
+    output.push_str(&recommendation_block(report, &palette));
+    if !verbose {
+        output.push('\n');
+        output.push_str(&palette.dim("Tip: run with --verbose to see full details per endpoint."));
+        output.push('\n');
+    }
+    output
+}
+
+fn render_endpoints_summary(report: &CompareReport, palette: Palette, output: &mut String) {
+    let mut rows = vec![vec![
+        Cell::styled("RPC", palette.label("RPC")),
+        Cell::styled("Endpoint", palette.label("Endpoint")),
+        Cell::styled("Verdict", palette.label("Verdict")),
+        Cell::styled("Score", palette.label("Score")),
+        Cell::styled("Latency", palette.label("Latency")),
+        Cell::styled("Slot lag", palette.label("Slot lag")),
+    ]];
+    for endpoint in &report.endpoints {
+        rows.push(vec![
+            Cell::plain(format!("#{}", endpoint.index)),
+            Cell::plain(endpoint_label(&endpoint.url)),
+            Cell::styled(
+                endpoint.verdict.to_string(),
+                palette.verdict(endpoint.verdict),
+            ),
+            Cell::plain(format!("{}/100", endpoint.score)),
+            Cell::plain(format_latency_spaced(endpoint.average_latency_ms)),
+            Cell::plain(format_slot_lag_compact(endpoint.slot_lag)),
+        ]);
+    }
+    output.push_str(&table::render(&rows, 3));
+    output.push('\n');
+}
+
+fn render_endpoints_verbose(report: &CompareReport, palette: Palette, output: &mut String) {
     for endpoint in &report.endpoints {
         output.push_str(&palette.heading(&format!("RPC #{}", endpoint.index)));
         output.push('\n');
-        output.push_str(&format!("{} {}\n", palette.label("URL:"), endpoint.url));
-        output.push_str(&format!(
-            "{} {}\n",
-            palette.label("Genesis:"),
-            format_genesis(&endpoint.genesis_hash)
-        ));
-        output.push_str(&format!(
-            "{} {}\n",
-            palette.label("Verdict:"),
-            palette.verdict(endpoint.verdict)
-        ));
-        output.push_str(&format!(
-            "{} {}/100\n",
-            palette.label("Score:"),
-            endpoint.score
-        ));
-        output.push_str(&format!(
-            "{} {}\n",
-            palette.label("Slot:"),
-            format_slot(endpoint.slot)
-        ));
-        output.push_str(&format!(
-            "{} {}\n",
-            palette.label("Slot lag:"),
-            format_slot_lag(endpoint.slot_lag)
-        ));
-        output.push_str(&format!(
-            "{} {}\n",
-            palette.label("Average latency:"),
-            format_latency(endpoint.average_latency_ms)
-        ));
-        output.push_str(&format!(
-            "{} {}\n",
-            palette.label("Failed checks:"),
-            format_failed_checks(&endpoint.failed_checks)
-        ));
-        output.push_str(&format!(
-            "{} {}\n",
-            palette.label("Blockhash valid:"),
-            if endpoint.blockhash_valid {
-                palette.good("yes")
-            } else {
-                palette.bad("no")
-            }
-        ));
+        let blockhash = if endpoint.blockhash_valid {
+            palette.good("yes")
+        } else {
+            palette.bad("no")
+        };
+        let rows = vec![
+            detail_row(palette, "URL", endpoint.url.clone()),
+            detail_row(palette, "Genesis", format_genesis(&endpoint.genesis_hash)),
+            vec![
+                Cell::styled("Verdict", palette.label("Verdict")),
+                Cell::styled(
+                    endpoint.verdict.to_string(),
+                    palette.verdict(endpoint.verdict),
+                ),
+            ],
+            detail_row(palette, "Score", format!("{}/100", endpoint.score)),
+            detail_row(palette, "Slot", format_slot(endpoint.slot)),
+            detail_row(palette, "Slot lag", format_slot_lag(endpoint.slot_lag)),
+            detail_row(
+                palette,
+                "Average latency",
+                format_latency_spaced(endpoint.average_latency_ms),
+            ),
+            detail_row(
+                palette,
+                "Failed checks",
+                format_failed_checks(&endpoint.failed_checks),
+            ),
+            vec![
+                Cell::styled("Blockhash valid", palette.label("Blockhash valid")),
+                Cell::styled(
+                    if endpoint.blockhash_valid {
+                        "yes"
+                    } else {
+                        "no"
+                    },
+                    blockhash,
+                ),
+            ],
+        ];
+        output.push_str(&table::render(&rows, 3));
         if !endpoint.notes.is_empty() {
-            output.push_str(&palette.label("Notes:"));
+            output.push_str(&palette.label("Notes"));
             output.push('\n');
             for note in &endpoint.notes {
                 output.push_str(&format!("- {note}\n"));
@@ -84,18 +135,62 @@ pub fn render_human_colored(report: &CompareReport, palette: Palette) -> String 
         }
         output.push('\n');
     }
+}
 
-    output.push_str(&palette.heading("Recommendation:"));
-    output.push('\n');
-    output.push_str(&report.recommendation);
-    output.push('\n');
+fn detail_row(palette: Palette, label: &str, value: String) -> Vec<Cell> {
+    vec![
+        Cell::styled(label.to_string(), palette.label(label)),
+        Cell::plain(value),
+    ]
+}
+
+/// Build the recommendation block. When a best endpoint exists, lead with a
+/// compact `Best RPC: #N · host` line and then the narrative, dropping the raw
+/// `Best RPC:` / `Worst RPC:` lines the scorer emits; on a network mismatch
+/// (no ranking) the recommendation text is shown verbatim.
+fn recommendation_block(report: &CompareReport, palette: &Palette) -> String {
+    let Some(best) = report.best_endpoint_index else {
+        return format!("{}\n", report.recommendation);
+    };
+    let host = report
+        .endpoints
+        .iter()
+        .find(|endpoint| endpoint.index == best)
+        .map_or_else(
+            || best.to_string(),
+            |endpoint| endpoint_label(&endpoint.url),
+        );
+    let mut output = format!("{} #{best} · {host}\n", palette.label("Best RPC:"));
+    for line in report.recommendation.lines() {
+        if line.starts_with("Best RPC:") || line.starts_with("Worst RPC:") {
+            continue;
+        }
+        output.push_str(line);
+        output.push('\n');
+    }
     output
 }
 
+fn format_slot_lag_compact(slot_lag: Option<u64>) -> String {
+    match slot_lag {
+        Some(0) => "baseline".to_string(),
+        Some(lag) => format!("{lag} behind"),
+        None => "n/a".to_string(),
+    }
+}
+
+/// Latency for human output, with a space between value and unit (`13 ms`).
+/// The Markdown report keeps its own `format_latency` (`13ms`) for stability.
+fn format_latency_spaced(latency: Option<u128>) -> String {
+    latency.map_or_else(|| "n/a".to_string(), style::millis)
+}
+
+/// Serialize a compare report to pretty-printed JSON.
 pub fn render_json(report: &CompareReport) -> Result<String, AppError> {
     serde_json::to_string_pretty(report).map_err(AppError::SerializeReport)
 }
 
+/// Render a compare report as a shareable Markdown document (no ANSI, redacted).
 pub fn render_markdown(report: &CompareReport) -> String {
     let mut output = String::new();
     output.push_str("# Solana Infra Doctor RPC Compare Report\n\n");
@@ -186,6 +281,7 @@ pub fn render_markdown(report: &CompareReport) -> String {
     output
 }
 
+/// Render the Markdown report and write it to `path`.
 pub fn write_markdown_report(
     report: &CompareReport,
     path: &std::path::Path,

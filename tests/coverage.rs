@@ -4,22 +4,20 @@ use solana_infra_doctor::{
     color::{ColorChoice, Palette},
     compare::{
         build_compare_report, render_human as render_compare_human,
-        render_human_colored as render_compare_human_colored, render_json as render_compare_json,
-        render_markdown, run_compare, score_endpoint, slot_lag, write_markdown_report,
-        CompareEndpoint, CompareProfileSummary,
+        render_json as render_compare_json, render_markdown, run_compare, score_endpoint, slot_lag,
+        write_markdown_report, CompareEndpoint, CompareProfileSummary,
     },
     latency::{average_latency_ms, Latency},
     redact::{redact_text, redact_url},
-    report::{render_human, render_human_colored, render_json},
+    report::{render_human, render_json},
     rpc::{
         BlockhashValidResponse, JsonRpcRequest, LatestBlockhashResponse, PerformanceSample,
         RpcEndpoint,
     },
     verdict::Verdict,
     ws::{
-        classify, derive_ws_url, render_human as ws_render_human,
-        render_human_colored as ws_render_human_colored, render_json as ws_render_json, run_ws,
-        WsReport,
+        classify, derive_ws_url, render_human as ws_render_human, render_json as ws_render_json,
+        run_ws, WsReport,
     },
 };
 use std::{
@@ -31,6 +29,17 @@ use std::{
     time::Duration,
 };
 use url::Url;
+
+/// A disabled palette: human renderers emit no ANSI, so assertions can match the
+/// plain text. Output is byte-identical to non-TTY default output.
+fn plain() -> Palette {
+    Palette::new(false)
+}
+
+/// An enabled palette: human renderers emit ANSI styling.
+fn colored() -> Palette {
+    Palette::new(true)
+}
 
 struct MockRpcServer {
     url: String,
@@ -190,7 +199,7 @@ async fn full_check_returns_good_for_healthy_rpc() {
 
     assert_eq!(report.verdict, Verdict::Good);
     assert_eq!(report.rpc_url, expected_url);
-    assert_eq!(report.summary, "all RPC readiness checks succeeded");
+    assert_eq!(report.summary, "All RPC readiness checks passed");
     assert_eq!(report.checks.len(), 7);
     assert!(report.average_latency_ms.is_some());
     assert!(report
@@ -428,21 +437,22 @@ fn verdict_latency_and_report_helpers_are_covered() {
         fail_on_warning: true,
         checks: vec![success, failed],
     };
-    let human = render_human(&report);
-    assert!(human.contains("Average latency: n/a"));
-    assert!(human.contains("--fail-on-warning enabled"));
-    assert!(human.contains("[malformed_response]"));
+    // Verbose human output shows n/a latency, the fail-on-warning policy note,
+    // and per-check error kinds.
+    let verbose = render_human(&report, plain(), true);
+    assert!(verbose.contains("n/a"));
+    assert!(verbose.contains("--fail-on-warning is enabled"));
+    assert!(verbose.contains("[malformed_response]"));
 
     let mut report_with_latency = report.clone();
     report_with_latency.average_latency_ms = Some(200);
     report_with_latency.fail_on_warning = false;
-    let human_with_latency = render_human(&report_with_latency);
-    assert!(human_with_latency.contains("Average latency: 200ms"));
-    assert!(!human_with_latency.contains("Warning policy:"));
+    let with_latency = render_human(&report_with_latency, plain(), false);
+    assert!(with_latency.contains("200 ms"));
+    assert!(!with_latency.contains("Warning policy"));
 
     let json = render_json(&report).unwrap();
     assert!(json.contains("\"verdict\": \"WARNING\""));
-    solana_infra_doctor::report::print_report(&report).unwrap();
     solana_infra_doctor::report::print_json(&report).unwrap();
 
     assert_eq!(ErrorKind::InvalidUrl.label(), "invalid_url");
@@ -815,12 +825,19 @@ fn compare_json_markdown_and_human_outputs_have_required_shape() {
     ];
     let report = build_compare_report(CompareProfile::Bot, &reports);
 
-    let human = render_compare_human(&report);
-    assert!(human.contains("Solana Infra Doctor — RPC Compare"));
-    assert!(human.contains("Profile: bot"));
-    assert!(human.contains("RPC #1"));
-    assert!(human.contains("Slot lag: baseline"));
-    assert!(human.contains("Failed checks: getRecentPerformanceSamples"));
+    let concise = render_compare_human(&report, plain(), false);
+    assert!(concise.contains("Solana Infra Doctor · RPC Comparison"));
+    assert!(concise.contains("Profile: bot"));
+    assert!(concise.contains("baseline")); // slot lag column
+    assert!(concise.contains("/100")); // score column
+    assert!(concise.contains("Recommendation"));
+    // Concise output is a summary table: no per-endpoint detail blocks.
+    assert!(!concise.contains("Failed checks"));
+
+    let verbose = render_compare_human(&report, plain(), true);
+    assert!(verbose.contains("RPC #1"));
+    assert!(verbose.contains("Failed checks"));
+    assert!(verbose.contains("getRecentPerformanceSamples"));
 
     let json = render_compare_json(&report).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -895,10 +912,11 @@ fn compare_tie_breakers_and_format_variants_are_covered() {
         .iter()
         .any(|note| note.contains("core RPC methods")));
 
-    let human = render_compare_human(&report);
-    assert!(human.contains("Slot: n/a"));
-    assert!(human.contains("Slot lag: n/a"));
-    assert!(human.contains("Average latency: n/a"));
+    let human = render_compare_human(&report, plain(), true);
+    assert!(human.contains("Slot"));
+    assert!(human.contains("Slot lag"));
+    assert!(human.contains("Average latency"));
+    assert!(human.contains("n/a"));
 
     let markdown = render_markdown(&build_compare_report(
         CompareProfile::General,
@@ -1074,9 +1092,13 @@ async fn check_does_not_leak_secret_in_error_output() {
         .iter()
         .all(|check| !check.detail.contains("FAKE_SECRET_123")));
 
-    let human = render_human(&report);
+    // The secret must never appear in default human output, verbose human
+    // output (which shows the full redacted URL), or JSON.
+    let concise = render_human(&report, plain(), false);
+    let verbose = render_human(&report, plain(), true);
     let json = render_json(&report).unwrap();
-    assert!(!human.contains("FAKE_SECRET_123"));
+    assert!(!concise.contains("FAKE_SECRET_123"));
+    assert!(!verbose.contains("FAKE_SECRET_123"));
     assert!(!json.contains("FAKE_SECRET_123"));
 }
 
@@ -1177,9 +1199,10 @@ async fn ws_happy_path_reports_good() {
     assert!(report.unsubscribed);
     assert!(report.closed_cleanly);
 
-    let human = ws_render_human(&report);
-    assert!(human.contains("Solana Infra Doctor — WebSocket"));
-    assert!(human.contains("Verdict: GOOD"));
+    let human = ws_render_human(&report, plain(), false);
+    assert!(human.contains("Solana Infra Doctor · WebSocket Readiness"));
+    assert!(human.contains("GOOD"));
+    assert!(human.contains("First notification"));
     assert!(human.contains("slot 424000000"));
 
     let json = ws_render_json(&report).unwrap();
@@ -1199,7 +1222,7 @@ async fn ws_timeout_without_notification_is_bad() {
     assert!(report.subscribed); // confirmation was received
     assert!(report.first_slot.is_none());
     assert!(report.time_to_first_notification_ms.is_none());
-    assert!(ws_render_human(&report).contains("Verdict: BAD"));
+    assert!(ws_render_human(&report, plain(), false).contains("BAD"));
 }
 
 #[tokio::test]
@@ -1235,7 +1258,7 @@ async fn ws_connection_refused_is_bad() {
 
     assert_eq!(report.verdict, Verdict::Bad);
     assert!(!report.connected);
-    assert!(ws_render_human(&report).contains("connection failed"));
+    assert!(ws_render_human(&report, plain(), false).contains("connection failed"));
 }
 
 #[tokio::test]
@@ -1359,7 +1382,7 @@ async fn ws_notification_without_slot_or_subscription_is_warning() {
 
     // Rendering a notification that arrived without a slot value exercises the
     // detail fallback path.
-    assert!(ws_render_human(&report).contains("First slot:"));
+    assert!(ws_render_human(&report, plain(), false).contains("First notification"));
 }
 
 #[tokio::test]
@@ -1393,11 +1416,12 @@ fn ws_render_human_shows_degraded_steps_and_notes() {
         ..degraded
     };
 
-    let human = ws_render_human(&report);
-    assert!(human.contains("Verdict: WARNING"));
-    assert!(human.contains("Unsubscribe:  FAIL"));
-    assert!(human.contains("Close:        FAIL"));
-    assert!(human.contains("Notes:"));
+    let human = ws_render_human(&report, plain(), false);
+    assert!(human.contains("WARNING"));
+    assert!(human.contains("Unsubscribe"));
+    assert!(human.contains("Close"));
+    assert!(human.contains("FAIL"));
+    assert!(human.contains("Notes"));
     assert!(human.contains("slow"));
 }
 
@@ -1447,9 +1471,11 @@ fn compare_rejects_mismatched_genesis_networks() {
         .iter()
         .all(|endpoint| endpoint.slot_lag.is_none()));
 
-    let human = render_compare_human(&report);
-    assert!(human.contains("Cannot compare endpoints from different Solana networks."));
-    assert!(human.contains("EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"));
+    let concise = render_compare_human(&report, plain(), false);
+    assert!(concise.contains("different Solana networks"));
+    // The genesis hash is detail, shown only in verbose.
+    let verbose = render_compare_human(&report, plain(), true);
+    assert!(verbose.contains("EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"));
 
     let json = render_compare_json(&report).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -1500,8 +1526,8 @@ fn compare_recommendation_describes_latency_freshness_tradeoff() {
 
 #[test]
 fn colored_human_output_is_semantic_and_disabled_is_byte_identical() {
-    let on = Palette::new(true);
-    let off = Palette::new(false);
+    let on = colored();
+    let off = plain();
 
     // --- check ---
     let check = compare_check_report(
@@ -1512,19 +1538,21 @@ fn colored_human_output_is_semantic_and_disabled_is_byte_identical() {
         false,
         &["getRecentPerformanceSamples"],
     );
-    let check_plain = render_human(&check);
-    assert_eq!(render_human_colored(&check, off), check_plain);
-    let check_colored = render_human_colored(&check, on);
-    assert_ne!(check_colored, check_plain);
-    // Title carries the azure accent; labels are muted; OK is bold green, FAIL bold red.
-    assert!(check_colored.contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor\x1b[0m"));
-    assert!(check_colored.contains("\x1b[38;2;139;148;158mVerdict:\x1b[0m"));
-    assert!(check_colored.contains("\x1b[1;38;2;63;185;80mOK"));
-    assert!(check_colored.contains("\x1b[1;38;2;248;81;73mFAIL"));
-    // The bold red FAIL value renders for the BAD verdict too.
-    assert!(check_colored.contains("\x1b[1;38;2;248;81;73mBAD\x1b[0m"));
-    // print_report_colored exercises the colored stdout path.
-    solana_infra_doctor::report::print_report_colored(&check, on).unwrap();
+    // Disabled palette is byte-identical to plain default output.
+    let check_default_plain = render_human(&check, off, false);
+    assert_eq!(render_human(&check, off, false), check_default_plain);
+    let check_default_colored = render_human(&check, on, false);
+    assert_ne!(check_default_colored, check_default_plain);
+    // Title carries the azure accent; verdict and category statuses are colored.
+    assert!(check_default_colored
+        .contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor · RPC Readiness\x1b[0m"));
+    assert!(check_default_colored.contains("\x1b[1;38;2;248;81;73mBAD\x1b[0m")); // verdict
+    assert!(check_default_colored.contains("\x1b[1;38;2;63;185;80mPASS")); // a passing category
+                                                                           // Verbose: the failed method renders FAIL in bold red; disabled stays plain.
+    let check_verbose_plain = render_human(&check, off, true);
+    assert_eq!(render_human(&check, off, true), check_verbose_plain);
+    let check_verbose_colored = render_human(&check, on, true);
+    assert!(check_verbose_colored.contains("\x1b[1;38;2;248;81;73mFAIL"));
 
     // --- compare (healthy + degraded endpoints, then a network mismatch) ---
     let compare = build_compare_report(
@@ -1548,15 +1576,18 @@ fn colored_human_output_is_semantic_and_disabled_is_byte_identical() {
             ),
         ],
     );
-    let compare_plain = render_compare_human(&compare);
-    assert_eq!(render_compare_human_colored(&compare, off), compare_plain);
-    let compare_colored = render_compare_human_colored(&compare, on);
-    assert!(
-        compare_colored.contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor — RPC Compare\x1b[0m")
-    );
-    assert!(compare_colored.contains("\x1b[1mRPC #1\x1b[0m"));
-    assert!(compare_colored.contains("\x1b[38;2;63;185;80myes\x1b[0m")); // blockhash yes -> green
-    assert!(compare_colored.contains("\x1b[38;2;248;81;73mno\x1b[0m")); // blockhash no -> red
+    let compare_plain = render_compare_human(&compare, off, false);
+    assert_eq!(render_compare_human(&compare, off, false), compare_plain);
+    let compare_colored = render_compare_human(&compare, on, false);
+    assert!(compare_colored
+        .contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor · RPC Comparison\x1b[0m"));
+    assert!(compare_colored.contains("\x1b[1;38;2;63;185;80mGOOD\x1b[0m")); // green verdict
+    assert!(compare_colored.contains("\x1b[1;38;2;210;153;34mWARNING\x1b[0m")); // amber verdict
+                                                                                // Verbose: per-endpoint blocks, bold RPC headings, blockhash yes/no colored.
+    let compare_verbose = render_compare_human(&compare, on, true);
+    assert!(compare_verbose.contains("\x1b[1mRPC #1\x1b[0m"));
+    assert!(compare_verbose.contains("\x1b[38;2;63;185;80myes\x1b[0m")); // blockhash yes -> green
+    assert!(compare_verbose.contains("\x1b[38;2;248;81;73mno\x1b[0m")); // blockhash no -> red
 
     let mismatch = build_compare_report(
         CompareProfile::General,
@@ -1586,13 +1617,11 @@ fn colored_human_output_is_semantic_and_disabled_is_byte_identical() {
         ],
     );
     assert!(mismatch.network_mismatch);
-    assert_eq!(
-        render_compare_human_colored(&mismatch, off),
-        render_compare_human(&mismatch)
-    );
-    let mismatch_colored = render_compare_human_colored(&mismatch, on);
+    let mismatch_plain = render_compare_human(&mismatch, off, false);
+    assert_eq!(render_compare_human(&mismatch, off, false), mismatch_plain);
+    let mismatch_colored = render_compare_human(&mismatch, on, false);
     assert!(mismatch_colored.contains("different Solana networks"));
-    assert!(mismatch_colored.contains("\x1b[38;2;139;148;158m")); // muted mismatch lines
+    assert!(mismatch_colored.contains("\x1b[1;38;2;210;153;34m")); // amber mismatch banner
 
     // --- ws (a passing and a failing step, plus notes) ---
     let ws = WsReport {
@@ -1608,15 +1637,16 @@ fn colored_human_output_is_semantic_and_disabled_is_byte_identical() {
         unsubscribed: false,
         closed_cleanly: false,
         summary: "degraded".to_string(),
-        notes: vec!["First slot notification was slow at 5000ms.".to_string()],
+        notes: vec!["First notification was slow at 5000 ms.".to_string()],
     };
-    let ws_plain = ws_render_human(&ws);
-    assert_eq!(ws_render_human_colored(&ws, off), ws_plain);
-    let ws_colored = ws_render_human_colored(&ws, on);
-    assert!(ws_colored.contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor — WebSocket\x1b[0m"));
-    assert!(ws_colored.contains("\x1b[1;38;2;63;185;80mOK")); // Connect OK -> bold green
+    let ws_plain = ws_render_human(&ws, off, false);
+    assert_eq!(ws_render_human(&ws, off, false), ws_plain);
+    let ws_colored = ws_render_human(&ws, on, false);
+    assert!(ws_colored
+        .contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor · WebSocket Readiness\x1b[0m"));
+    assert!(ws_colored.contains("\x1b[1;38;2;63;185;80mPASS")); // Connect PASS -> bold green
     assert!(ws_colored.contains("\x1b[1;38;2;248;81;73mFAIL")); // Close FAIL -> bold red
-    assert!(ws_colored.contains("\x1b[1mNotes:\x1b[0m")); // bold heading
+    assert!(ws_colored.contains("\x1b[1mNotes\x1b[0m")); // bold heading
 }
 
 #[test]
@@ -1627,7 +1657,8 @@ fn palette_helpers_and_choice_resolution() {
     assert_eq!(on.heading("h"), "\x1b[1mh\x1b[0m");
     assert_eq!(on.bold("b"), "\x1b[1mb\x1b[0m");
     assert_eq!(on.title("t"), "\x1b[1;38;2;88;166;255mt\x1b[0m");
-    assert_eq!(on.ok("OK"), "\x1b[1;38;2;63;185;80mOK\x1b[0m");
+    assert_eq!(on.ok("PASS"), "\x1b[1;38;2;63;185;80mPASS\x1b[0m");
+    assert_eq!(on.warn("WARN"), "\x1b[1;38;2;210;153;34mWARN\x1b[0m");
     assert_eq!(on.fail("FAIL"), "\x1b[1;38;2;248;81;73mFAIL\x1b[0m");
     assert_eq!(on.good("yes"), "\x1b[38;2;63;185;80myes\x1b[0m");
     assert_eq!(on.bad("no"), "\x1b[38;2;248;81;73mno\x1b[0m");
@@ -1640,17 +1671,46 @@ fn palette_helpers_and_choice_resolution() {
     let off = Palette::new(false);
     assert_eq!(off.title("t"), "t");
     assert_eq!(off.verdict(Verdict::Good), "GOOD");
-    assert_eq!(off.ok("OK"), "OK");
+    assert_eq!(off.ok("PASS"), "PASS");
+    assert_eq!(off.warn("WARN"), "WARN");
     assert_eq!(off.fail("FAIL"), "FAIL");
     assert_eq!(off.good("yes"), "yes");
     assert_eq!(off.bad("no"), "no");
     assert!(!off.enabled());
 
-    // Every ColorChoice / context branch.
-    assert!(Palette::resolve(ColorChoice::Always, false, false, false).enabled());
-    assert!(!Palette::resolve(ColorChoice::Always, true, false, true).enabled()); // json never colors
-    assert!(!Palette::resolve(ColorChoice::Never, true, false, false).enabled());
-    assert!(Palette::resolve(ColorChoice::Auto, true, false, false).enabled());
-    assert!(!Palette::resolve(ColorChoice::Auto, false, false, false).enabled()); // not a tty
-    assert!(!Palette::resolve(ColorChoice::Auto, true, true, false).enabled()); // NO_COLOR
+    // Every ColorChoice / context branch (choice, is_terminal, no_color, term_dumb, json).
+    assert!(Palette::resolve(ColorChoice::Always, false, false, false, false).enabled());
+    assert!(!Palette::resolve(ColorChoice::Always, true, false, false, true).enabled()); // json
+    assert!(!Palette::resolve(ColorChoice::Never, true, false, false, false).enabled());
+    assert!(Palette::resolve(ColorChoice::Auto, true, false, false, false).enabled());
+    assert!(!Palette::resolve(ColorChoice::Auto, false, false, false, false).enabled()); // not a tty
+    assert!(!Palette::resolve(ColorChoice::Auto, true, true, false, false).enabled()); // NO_COLOR
+    assert!(!Palette::resolve(ColorChoice::Auto, true, false, true, false).enabled());
+    // TERM=dumb
+}
+
+#[test]
+fn output_style_helpers() {
+    use solana_infra_doctor::output::style::{endpoint_label, millis, Status};
+
+    assert_eq!(millis(68), "68 ms");
+
+    // Status labels and their colored forms (all four variants).
+    let on = colored();
+    let off = plain();
+    assert_eq!(Status::Pass.label(), "PASS");
+    assert_eq!(Status::Warn.label(), "WARN");
+    assert_eq!(Status::Fail.label(), "FAIL");
+    assert_eq!(Status::Skip.label(), "SKIP");
+    assert_eq!(Status::Pass.paint(off), "PASS");
+    assert_eq!(Status::Warn.paint(on), "\x1b[1;38;2;210;153;34mWARN\x1b[0m");
+    assert_eq!(Status::Fail.paint(on), "\x1b[1;38;2;248;81;73mFAIL\x1b[0m");
+    assert_eq!(Status::Skip.paint(on), "\x1b[38;2;139;148;158mSKIP\x1b[0m");
+
+    // endpoint_label extracts the host; unparseable input falls back to itself.
+    assert_eq!(
+        endpoint_label("https://api.mainnet-beta.solana.com/"),
+        "api.mainnet-beta.solana.com"
+    );
+    assert_eq!(endpoint_label("not a url"), "not a url");
 }

@@ -1,3 +1,6 @@
+//! Single-endpoint HTTP JSON-RPC readiness diagnostics: run the core, blockhash,
+//! and performance checks against one RPC endpoint and produce a [`CheckReport`].
+
 use crate::{
     cli::CheckArgs,
     error::AppError,
@@ -16,24 +19,40 @@ pub mod verdict;
 pub use verdict::calculate_verdict;
 use verdict::summarize;
 
+/// The full result of diagnosing a single RPC endpoint. This is the serialized
+/// shape emitted by `--json`.
 #[derive(Debug, Clone, Serialize)]
 pub struct CheckReport {
+    /// Overall readiness verdict (drives the process exit code).
     pub verdict: Verdict,
+    /// The redacted RPC URL that was diagnosed.
     pub rpc_url: String,
+    /// One-line, human-readable summary of the verdict.
     pub summary: String,
+    /// Mean latency across the individual checks, if any succeeded.
     pub average_latency_ms: Option<u128>,
+    /// Whether `--fail-on-warning` was set (surfaced for CI context).
     pub fail_on_warning: bool,
+    /// The individual per-method check results.
     pub checks: Vec<RpcCheck>,
 }
 
+/// The result of a single JSON-RPC method check.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RpcCheck {
+    /// Which diagnostic category this check belongs to.
     pub category: CheckCategory,
+    /// The JSON-RPC method that was called.
     pub method: &'static str,
+    /// Whether the check succeeded or failed.
     pub status: CheckStatus,
+    /// Round-trip latency for the call, if it completed.
     pub latency_ms: Option<u128>,
+    /// Human-readable detail or error message (redacted).
     pub detail: String,
+    /// Classified error kind when the check failed.
     pub error_kind: Option<ErrorKind>,
+    /// Whether a failure of this check is critical to readiness.
     pub critical: bool,
 }
 
@@ -74,6 +93,8 @@ impl RpcCheck {
     }
 }
 
+/// The diagnostic category a check belongs to. `Core` and `Blockhash` checks are
+/// critical to readiness; `Performance` checks are informational.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckCategory {
@@ -83,6 +104,7 @@ pub enum CheckCategory {
 }
 
 impl CheckCategory {
+    /// The human-readable category name (`Core`, `Blockhash`, `Performance`).
     pub fn label(self) -> &'static str {
         match self {
             Self::Core => "Core",
@@ -96,6 +118,7 @@ impl CheckCategory {
     }
 }
 
+/// Whether an individual check succeeded or failed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckStatus {
@@ -103,6 +126,7 @@ pub enum CheckStatus {
     Failed,
 }
 
+/// A classified failure cause, used to drive verdicts and machine-readable output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorKind {
@@ -115,6 +139,7 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
+    /// The stable snake_case identifier used in JSON output and reports.
     pub fn label(self) -> &'static str {
         match self {
             Self::InvalidUrl => "invalid_url",
@@ -127,6 +152,8 @@ impl ErrorKind {
     }
 }
 
+/// Diagnose a single RPC endpoint: run every readiness check, measure latency,
+/// compute the verdict, and return a redaction-safe [`CheckReport`].
 pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
     let endpoint = match RpcEndpoint::parse(&args.rpc) {
         Ok(endpoint) => endpoint,
@@ -619,7 +646,7 @@ mod tests {
 
         assert_eq!(report.verdict, Verdict::Good);
         assert_eq!(report.rpc_url, expected_url);
-        assert_eq!(report.summary, "all RPC readiness checks succeeded");
+        assert_eq!(report.summary, "All RPC readiness checks passed");
         assert_eq!(report.checks.len(), 7);
         assert!(report.average_latency_ms.is_some());
         assert!(report

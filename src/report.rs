@@ -1,7 +1,11 @@
 use crate::{
-    checks::{CheckCategory, CheckReport, CheckStatus},
+    checks::{CheckCategory, CheckReport, CheckStatus, RpcCheck},
     color::Palette,
     error::AppError,
+    output::{
+        style::{self, Status},
+        table::{self, Cell},
+    },
 };
 
 const CATEGORY_ORDER: [CheckCategory; 3] = [
@@ -10,67 +14,113 @@ const CATEGORY_ORDER: [CheckCategory; 3] = [
     CheckCategory::Performance,
 ];
 
-pub fn print_report(report: &CheckReport) -> Result<(), AppError> {
-    println!("{}", render_human(report));
-    Ok(())
-}
-
-pub fn print_report_colored(report: &CheckReport, palette: Palette) -> Result<(), AppError> {
-    println!("{}", render_human_colored(report, palette));
-    Ok(())
-}
-
+/// Print the machine-readable JSON report to stdout.
 pub fn print_json(report: &CheckReport) -> Result<(), AppError> {
     let json = render_json(report)?;
     println!("{json}");
     Ok(())
 }
 
-pub fn render_human(report: &CheckReport) -> String {
-    render_human_colored(report, Palette::new(false))
-}
-
-pub fn render_human_colored(report: &CheckReport, palette: Palette) -> String {
-    let average = report
-        .average_latency_ms
-        .map_or_else(|| "n/a".to_string(), |value| format!("{value}ms"));
+/// Render the human-readable `check` report.
+///
+/// The default view is a concise summary: a safe endpoint label, the overall
+/// verdict, average latency, and a per-category pass/fail table. `verbose` adds
+/// the full per-check detail — the full redacted URL, every method's latency,
+/// full hashes, and error kinds. `verbose` affects human output only.
+pub fn render_human(report: &CheckReport, palette: Palette, verbose: bool) -> String {
     let mut output = String::new();
+    output.push_str(&palette.title("Solana Infra Doctor · RPC Readiness"));
+    output.push_str("\n\n");
 
-    output.push_str(&palette.title("Solana Infra Doctor"));
+    // Target: a safe hostname by default; the full redacted URL in verbose.
+    output.push_str(&palette.heading("Target"));
     output.push('\n');
-    output.push_str(&palette.label("==================="));
+    let (target_label, target_value) = if verbose {
+        ("RPC URL", report.rpc_url.clone())
+    } else {
+        ("Endpoint", style::endpoint_label(&report.rpc_url))
+    };
+    output.push_str(&table::render(
+        &[vec![
+            Cell::styled(target_label, palette.label(target_label)),
+            Cell::plain(target_value),
+        ]],
+        3,
+    ));
     output.push('\n');
-    output.push_str(&format!(
-        "{} {}\n",
-        palette.label("RPC URL:"),
-        report.rpc_url
+
+    // Result: verdict, average latency, and pass/fail counts.
+    output.push_str(&palette.heading("Result"));
+    output.push('\n');
+    let average = report.average_latency_ms.map_or_else(
+        || "n/a".to_string(),
+        |value| format!("{} average", style::millis(value)),
+    );
+    let passed = report
+        .checks
+        .iter()
+        .filter(|check| check.status == CheckStatus::Success)
+        .count();
+    let failed = report.checks.len() - passed;
+    output.push_str(&table::render(
+        &[
+            vec![
+                Cell::styled(report.verdict.to_string(), palette.verdict(report.verdict)),
+                Cell::plain(report.summary.clone()),
+            ],
+            vec![
+                Cell::styled("Latency", palette.label("Latency")),
+                Cell::plain(average),
+            ],
+            vec![
+                Cell::styled("Checks", palette.label("Checks")),
+                Cell::plain(format!("{passed} passed · {failed} failed")),
+            ],
+        ],
+        3,
     ));
-    output.push_str(&format!(
-        "{} {}\n",
-        palette.label("Verdict:"),
-        palette.verdict(report.verdict)
-    ));
-    output.push_str(&format!(
-        "{} {}\n",
-        palette.label("Summary:"),
-        report.summary
-    ));
-    output.push_str(&format!(
-        "{} {average}\n",
-        palette.label("Average latency:")
-    ));
-    if report.fail_on_warning {
-        output.push_str(
-            &palette.label(
-                "Warning policy: --fail-on-warning enabled; WARNING exits with code 1 for CI.",
-            ),
-        );
+    output.push('\n');
+
+    if verbose {
+        render_checks_verbose(report, palette, &mut output);
+    } else {
+        render_checks_summary(report, palette, &mut output);
+        output.push('\n');
+        output.push_str(&palette.dim("Tip: run with --verbose to see full details."));
         output.push('\n');
     }
-    output.push('\n');
-    output.push_str(&palette.heading("Checks:"));
-    output.push('\n');
 
+    output
+}
+
+/// Per-category status for the concise summary: `PASS` when every member check
+/// passed, `FAIL` when a critical check failed, otherwise `WARN` (only
+/// non-critical checks failed). Presentation only — derived from existing
+/// results, it never changes the verdict.
+fn category_status(checks: &[&RpcCheck]) -> Status {
+    if checks
+        .iter()
+        .all(|check| check.status == CheckStatus::Success)
+    {
+        Status::Pass
+    } else if checks
+        .iter()
+        .any(|check| check.critical && check.status == CheckStatus::Failed)
+    {
+        Status::Fail
+    } else {
+        Status::Warn
+    }
+}
+
+fn render_checks_summary(report: &CheckReport, palette: Palette, output: &mut String) {
+    output.push_str(&palette.heading("Checks"));
+    output.push('\n');
+    let mut rows = vec![vec![
+        Cell::styled("Category", palette.label("Category")),
+        Cell::styled("Status", palette.label("Status")),
+        Cell::styled("Summary", palette.label("Summary")),
+    ]];
     for category in CATEGORY_ORDER {
         let checks: Vec<_> = report
             .checks
@@ -80,34 +130,76 @@ pub fn render_human_colored(report: &CheckReport, palette: Palette) -> String {
         if checks.is_empty() {
             continue;
         }
-
-        output.push('\n');
-        output.push_str(&palette.heading(&format!("{}:", category.label())));
-        output.push('\n');
-        for check in checks {
-            // Pad each cell to a fixed visible width first, then colorize, so
-            // ANSI codes never disturb column alignment.
-            let status_cell = match check.status {
-                CheckStatus::Success => palette.ok(&format!("{:<4}", "OK")),
-                CheckStatus::Failed => palette.fail(&format!("{:<4}", "FAIL")),
-            };
-            let latency = check
-                .latency_ms
-                .map_or_else(|| "n/a".to_string(), |value| format!("{value}ms"));
-            let latency_cell = palette.label(&format!("{latency:>8}"));
-            let error_kind = check.error_kind.map_or_else(String::new, |kind| {
-                palette.label(&format!(" [{}]", kind.label()))
-            });
-            output.push_str(&format!(
-                "- {:<28} {} {}  {}{}\n",
-                check.method, status_cell, latency_cell, check.detail, error_kind
-            ));
-        }
+        let total = checks.len();
+        let passed = checks
+            .iter()
+            .filter(|check| check.status == CheckStatus::Success)
+            .count();
+        let status = category_status(&checks);
+        rows.push(vec![
+            Cell::plain(category.label()),
+            Cell::styled(status.label(), status.paint(palette)),
+            Cell::plain(format!("{passed} / {total}")),
+        ]);
     }
-
-    output
+    output.push_str(&table::render(&rows, 4));
 }
 
+fn render_checks_verbose(report: &CheckReport, palette: Palette, output: &mut String) {
+    output.push_str(&palette.heading("Checks"));
+    output.push('\n');
+    if report.fail_on_warning {
+        output.push_str(
+            &palette.dim("Warning policy: --fail-on-warning is enabled; WARNING exits 1 for CI."),
+        );
+        output.push('\n');
+    }
+    for category in CATEGORY_ORDER {
+        let checks: Vec<_> = report
+            .checks
+            .iter()
+            .filter(|check| check.category == category)
+            .collect();
+        if checks.is_empty() {
+            continue;
+        }
+        output.push('\n');
+        output.push_str(&palette.heading(category.label()));
+        output.push('\n');
+        let rows: Vec<Vec<Cell>> = checks
+            .iter()
+            .map(|check| {
+                let status = match check.status {
+                    CheckStatus::Success => Status::Pass,
+                    CheckStatus::Failed => Status::Fail,
+                };
+                let latency = check
+                    .latency_ms
+                    .map_or_else(|| "n/a".to_string(), style::millis);
+                let detail = match check.error_kind {
+                    Some(kind) => Cell::styled(
+                        format!("{} [{}]", check.detail, kind.label()),
+                        format!(
+                            "{}{}",
+                            check.detail,
+                            palette.dim(&format!(" [{}]", kind.label()))
+                        ),
+                    ),
+                    None => Cell::plain(check.detail.clone()),
+                };
+                vec![
+                    Cell::plain(format!("- {}", check.method)),
+                    Cell::styled(status.label(), status.paint(palette)),
+                    Cell::plain(latency),
+                    detail,
+                ]
+            })
+            .collect();
+        output.push_str(&table::render(&rows, 2));
+    }
+}
+
+/// Serialize a check report to pretty-printed JSON.
 pub fn render_json(report: &CheckReport) -> Result<String, AppError> {
     serde_json::to_string_pretty(report).map_err(AppError::SerializeReport)
 }
@@ -161,14 +253,27 @@ mod tests {
     }
 
     #[test]
-    fn renders_human_report_grouped_by_category() {
-        let rendered = render_human(&report());
-        assert!(rendered.contains("Solana Infra Doctor"));
-        assert!(rendered.contains("Verdict: GOOD"));
-        assert!(rendered.contains("Core:"));
-        assert!(rendered.contains("Blockhash:"));
-        assert!(rendered.contains("Performance:"));
-        assert!(rendered.contains("--fail-on-warning enabled"));
+    fn concise_output_summarizes_by_category_and_hides_detail() {
+        let rendered = render_human(&report(), Palette::new(false), false);
+        assert!(rendered.contains("Solana Infra Doctor · RPC Readiness"));
+        assert!(rendered.contains("GOOD"));
+        assert!(rendered.contains("Core"));
+        assert!(rendered.contains("Blockhash"));
+        assert!(rendered.contains("Performance"));
+        assert!(rendered.contains("Tip: run with --verbose"));
+        // Concise output hides per-method detail and the fail-on-warning note.
+        assert!(!rendered.contains("health is ok"));
+        assert!(!rendered.contains("--fail-on-warning"));
+    }
+
+    #[test]
+    fn verbose_output_shows_per_check_detail() {
+        let rendered = render_human(&report(), Palette::new(false), true);
+        assert!(rendered.contains("getHealth"));
+        assert!(rendered.contains("PASS"));
+        assert!(rendered.contains("health is ok"));
+        assert!(rendered.contains("100 ms"));
+        assert!(rendered.contains("--fail-on-warning is enabled"));
     }
 
     #[test]

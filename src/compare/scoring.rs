@@ -3,6 +3,7 @@
 use super::CompareEndpoint;
 use crate::{cli::CompareProfile, verdict::Verdict};
 
+/// Deterministically score an endpoint from `0` to `100` for a workload profile.
 pub fn score_endpoint(profile: CompareProfile, endpoint: &CompareEndpoint) -> u8 {
     let mut score = match endpoint.verdict {
         Verdict::Good => 40i32,

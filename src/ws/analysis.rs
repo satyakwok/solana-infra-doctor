@@ -10,7 +10,7 @@ pub fn classify(report: &WsReport) -> (Verdict, String, Vec<String>) {
     if !report.connected {
         return (
             Verdict::Bad,
-            "websocket connection failed".to_string(),
+            "WebSocket connection failed".to_string(),
             Vec::new(),
         );
     }
@@ -24,18 +24,18 @@ pub fn classify(report: &WsReport) -> (Verdict, String, Vec<String>) {
     match report.time_to_first_notification_ms {
         None => (
             Verdict::Bad,
-            "no slot notification received before timeout".to_string(),
+            "No slot notification received before timeout".to_string(),
             Vec::new(),
         ),
         Some(ms) if ms <= GOOD_NOTIFY_MS && report.unsubscribed && report.closed_cleanly => (
             Verdict::Good,
-            "websocket realtime checks succeeded".to_string(),
+            "WebSocket readiness checks passed".to_string(),
             Vec::new(),
         ),
         Some(ms) => {
             let mut notes = Vec::new();
             if ms > GOOD_NOTIFY_MS {
-                notes.push(format!("First slot notification was slow at {ms}ms."));
+                notes.push(format!("First notification was slow at {ms} ms."));
             }
             if !report.unsubscribed {
                 notes.push("Unsubscribe did not complete cleanly.".to_string());
@@ -45,7 +45,7 @@ pub fn classify(report: &WsReport) -> (Verdict, String, Vec<String>) {
             }
             (
                 Verdict::Warning,
-                "websocket is reachable but realtime behavior is degraded".to_string(),
+                "WebSocket is reachable, but realtime behavior is degraded".to_string(),
                 notes,
             )
         }

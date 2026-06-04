@@ -27,12 +27,15 @@ async fn main() {
 
 async fn run() -> anyhow::Result<i32> {
     let cli = Cli::parse();
-    // Human output is colored only on a real terminal, honoring `--color` and
-    // `NO_COLOR`. JSON is never colored (resolved per branch below).
+    let verbose = cli.verbose;
+    // Human output is colored only on a real terminal that has not opted out via
+    // `--color`, `NO_COLOR`, or `TERM=dumb`. JSON is never colored (the `false`
+    // json argument here is resolved per branch below, where JSON skips color).
     let palette = Palette::resolve(
         cli.color,
         std::io::stdout().is_terminal(),
         std::env::var_os("NO_COLOR").is_some(),
+        std::env::var("TERM").is_ok_and(|term| term == "dumb"),
         false,
     );
 
@@ -43,7 +46,7 @@ async fn run() -> anyhow::Result<i32> {
             if json {
                 report::print_json(&result)?;
             } else {
-                report::print_report_colored(&result, palette)?;
+                print!("{}", report::render_human(&result, palette, verbose));
             }
             Ok(result.verdict.exit_code())
         }
@@ -57,7 +60,7 @@ async fn run() -> anyhow::Result<i32> {
             if json {
                 println!("{}", compare::render_json(&result)?);
             } else {
-                print!("{}", compare::render_human_colored(&result, palette));
+                print!("{}", compare::render_human(&result, palette, verbose));
             }
             // A mixed-network comparison cannot produce a reliable ranking, so it
             // exits with the UNKNOWN code (3); same-network comparisons stay 0.
@@ -69,7 +72,7 @@ async fn run() -> anyhow::Result<i32> {
             if json {
                 println!("{}", ws::render_json(&result)?);
             } else {
-                print!("{}", ws::render_human_colored(&result, palette));
+                print!("{}", ws::render_human(&result, palette, verbose));
             }
             Ok(result.verdict.exit_code())
         }

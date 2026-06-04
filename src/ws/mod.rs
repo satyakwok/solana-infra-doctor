@@ -2,7 +2,16 @@
 //! time-to-first-slot-notification, unsubscribe, and close.
 
 use crate::{
-    cli::WsArgs, color::Palette, error::AppError, redact, rpc::RpcEndpoint, verdict::Verdict,
+    cli::WsArgs,
+    color::Palette,
+    error::AppError,
+    output::{
+        style::{self, Status},
+        table::{self, Cell},
+    },
+    redact,
+    rpc::RpcEndpoint,
+    verdict::Verdict,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
@@ -18,20 +27,35 @@ const SLOT_SUBSCRIBE_METHOD: &str = "slotSubscribe";
 const SLOT_SUBSCRIBE_REQUEST: &str = r#"{"jsonrpc":"2.0","id":1,"method":"slotSubscribe"}"#;
 const UNSUBSCRIBE_ACK_MS: u64 = 1_000;
 
+/// The result of a WebSocket readiness diagnostic. This is the serialized shape
+/// emitted by `--json`.
 #[derive(Debug, Clone, Serialize)]
 pub struct WsReport {
+    /// Overall readiness verdict (drives the process exit code).
     pub verdict: Verdict,
+    /// The redacted RPC URL the WebSocket URL was derived from.
     pub rpc_url: String,
+    /// The redacted `ws`/`wss` URL that was tested.
     pub ws_url: String,
+    /// Whether the WebSocket connection was established.
     pub connected: bool,
+    /// Time to establish the connection, in milliseconds.
     pub connect_latency_ms: Option<u128>,
+    /// The subscription method used (`slotSubscribe`).
     pub subscription_method: &'static str,
+    /// Whether the subscription was confirmed.
     pub subscribed: bool,
+    /// Time from subscribe to the first notification, in milliseconds.
     pub time_to_first_notification_ms: Option<u128>,
+    /// The slot reported by the first notification, if any.
     pub first_slot: Option<u64>,
+    /// Whether the unsubscribe was sent successfully.
     pub unsubscribed: bool,
+    /// Whether the connection closed cleanly.
     pub closed_cleanly: bool,
+    /// One-line, human-readable summary of the verdict.
     pub summary: String,
+    /// Advisory notes about degraded behavior.
     pub notes: Vec<String>,
 }
 
@@ -63,6 +87,9 @@ impl WsReport {
     }
 }
 
+/// Diagnose WebSocket readiness: derive the `ws`/`wss` URL, connect, subscribe
+/// with `slotSubscribe`, measure time-to-first-notification, unsubscribe, close,
+/// and return a redaction-safe [`WsReport`].
 pub async fn run_ws(args: WsArgs) -> Result<WsReport, AppError> {
     let endpoint = match RpcEndpoint::parse(&args.rpc) {
         Ok(endpoint) => endpoint,
@@ -180,114 +207,135 @@ async fn unsubscribe(
     true
 }
 
-pub fn render_human(report: &WsReport) -> String {
-    render_human_colored(report, Palette::new(false))
-}
-
-pub fn render_human_colored(report: &WsReport, palette: Palette) -> String {
+/// Render the human-readable `ws` report.
+///
+/// The default view is a compact step table (connect, subscribe, first
+/// notification, unsubscribe, close). `verbose` shows the full redacted RPC URL
+/// and any diagnostic notes. `verbose` affects human output only.
+pub fn render_human(report: &WsReport, palette: Palette, verbose: bool) -> String {
     let mut output = String::new();
-    output.push_str(&palette.title("Solana Infra Doctor — WebSocket"));
-    output.push('\n');
-    output.push_str(&palette.label("==============================="));
-    output.push('\n');
-    output.push_str(&format!(
-        "{} {}\n",
-        palette.label("RPC URL:"),
-        report.rpc_url
-    ));
-    output.push_str(&format!(
-        "{} {}\n",
-        palette.label("WS URL: "),
-        report.ws_url
-    ));
-    output.push_str(&format!(
-        "{} {}\n",
-        palette.label("Verdict:"),
-        palette.verdict(report.verdict)
-    ));
-    output.push_str(&format!(
-        "{} {}\n\n",
-        palette.label("Summary:"),
-        report.summary
-    ));
+    output.push_str(&palette.title("Solana Infra Doctor · WebSocket Readiness"));
+    output.push_str("\n\n");
 
-    output.push_str(&format!(
-        "{}{}\n",
-        palette.label("Connect:      "),
-        format_step(
-            palette,
-            report.connected,
-            report.connect_latency_ms.map(format_ms)
-        ),
+    // Target: RPC as a safe hostname by default (full redacted URL in verbose);
+    // the WebSocket URL is already redacted and short, so it is always shown.
+    output.push_str(&palette.heading("Target"));
+    output.push('\n');
+    let rpc_value = if verbose {
+        report.rpc_url.clone()
+    } else {
+        style::endpoint_label(&report.rpc_url)
+    };
+    output.push_str(&table::render(
+        &[
+            vec![
+                Cell::styled("RPC", palette.label("RPC")),
+                Cell::plain(rpc_value),
+            ],
+            vec![
+                Cell::styled("WebSocket", palette.label("WebSocket")),
+                Cell::plain(report.ws_url.clone()),
+            ],
+        ],
+        3,
     ));
-    output.push_str(&format!(
-        "{}{}\n",
-        palette.label("Subscribe:    "),
-        format_step(
-            palette,
-            report.subscribed,
-            Some(format!("{} (id 1)", report.subscription_method))
-        ),
-    ));
-    output.push_str(&format!(
-        "{}{}\n",
-        palette.label("First slot:   "),
-        format_step(
-            palette,
-            report.first_slot.is_some(),
-            report
-                .time_to_first_notification_ms
-                .map(|ms| match report.first_slot {
-                    Some(slot) => format!("{ms}ms (slot {slot})"),
-                    None => format_ms(ms),
-                })
-        ),
-    ));
-    output.push_str(&format!(
-        "{}{}\n",
-        palette.label("Unsubscribe:  "),
-        format_step(palette, report.unsubscribed, None)
-    ));
-    output.push_str(&format!(
-        "{}{}\n",
-        palette.label("Close:        "),
-        format_step(palette, report.closed_cleanly, None)
-    ));
+    output.push('\n');
 
+    // Result.
+    output.push_str(&palette.heading("Result"));
+    output.push('\n');
+    output.push_str(&table::render(
+        &[vec![
+            Cell::styled(report.verdict.to_string(), palette.verdict(report.verdict)),
+            Cell::plain(report.summary.clone()),
+        ]],
+        3,
+    ));
+    output.push('\n');
+
+    // Checks: one row per WebSocket step.
+    output.push_str(&palette.heading("Checks"));
+    output.push('\n');
+    let subscribe_detail = if report.subscribed {
+        format!("{} · id 1", report.subscription_method)
+    } else {
+        report.subscription_method.to_string()
+    };
+    let first_detail = report
+        .time_to_first_notification_ms
+        .map(|ms| match report.first_slot {
+            Some(slot) => format!("{} · slot {slot}", style::millis(ms)),
+            None => style::millis(ms),
+        })
+        .unwrap_or_default();
+    let mut rows = vec![vec![
+        Cell::styled("Check", palette.label("Check")),
+        Cell::styled("Status", palette.label("Status")),
+        Cell::styled("Detail", palette.label("Detail")),
+    ]];
+    rows.push(step_row(
+        palette,
+        "Connect",
+        report.connected,
+        report
+            .connect_latency_ms
+            .map(style::millis)
+            .unwrap_or_default(),
+    ));
+    rows.push(step_row(
+        palette,
+        "Subscribe",
+        report.subscribed,
+        subscribe_detail,
+    ));
+    rows.push(step_row(
+        palette,
+        "First notification",
+        report.first_slot.is_some(),
+        first_detail,
+    ));
+    rows.push(step_row(
+        palette,
+        "Unsubscribe",
+        report.unsubscribed,
+        String::new(),
+    ));
+    rows.push(step_row(
+        palette,
+        "Close",
+        report.closed_cleanly,
+        String::new(),
+    ));
+    output.push_str(&table::render(&rows, 4));
+
+    // Notes matter for degraded endpoints, so show them whenever present.
     if !report.notes.is_empty() {
         output.push('\n');
-        output.push_str(&palette.heading("Notes:"));
+        output.push_str(&palette.heading("Notes"));
         output.push('\n');
         for note in &report.notes {
             output.push_str(&format!("- {note}\n"));
         }
     }
+
+    if !verbose {
+        output.push('\n');
+        output.push_str(&palette.dim("Tip: run with --verbose to see full details."));
+        output.push('\n');
+    }
+
     output
+}
+
+fn step_row(palette: Palette, check: &str, ok: bool, detail: String) -> Vec<Cell> {
+    let status = if ok { Status::Pass } else { Status::Fail };
+    vec![
+        Cell::plain(check.to_string()),
+        Cell::styled(status.label(), status.paint(palette)),
+        Cell::plain(detail),
+    ]
 }
 
 pub fn render_json(report: &WsReport) -> Result<String, AppError> {
     serde_json::to_string_pretty(report).map_err(AppError::SerializeReport)
-}
-
-fn format_step(palette: Palette, ok: bool, detail: Option<String>) -> String {
-    // Pad to a fixed visible width before colorizing so ANSI never disturbs
-    // alignment; the no-detail case has nothing to align against.
-    let paint = |text: &str| {
-        if ok {
-            palette.ok(text)
-        } else {
-            palette.fail(text)
-        }
-    };
-    match detail {
-        Some(detail) => format!(
-            "{} {detail}",
-            paint(&format!("{:<5}", if ok { "OK" } else { "FAIL" }))
-        ),
-        None => paint(if ok { "OK" } else { "FAIL" }),
-    }
-}
-
-fn format_ms(ms: u128) -> String {
-    format!("{ms}ms")
 }

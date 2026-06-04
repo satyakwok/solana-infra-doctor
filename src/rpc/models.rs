@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// A JSON-RPC 2.0 request envelope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JsonRpcRequest {
     pub jsonrpc: &'static str,
@@ -12,10 +13,12 @@ pub struct JsonRpcRequest {
 }
 
 impl JsonRpcRequest {
+    /// A request for `method` with no parameters.
     pub fn new(id: u64, method: &'static str) -> Self {
         Self::with_params(id, method, Vec::new())
     }
 
+    /// A request for `method` with the given `params`.
     pub fn with_params(id: u64, method: &'static str, params: Vec<Value>) -> Self {
         Self {
             jsonrpc: "2.0",
@@ -26,6 +29,7 @@ impl JsonRpcRequest {
     }
 }
 
+/// A JSON-RPC 2.0 response envelope with a typed `result`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct JsonRpcResponse<T> {
     pub jsonrpc: String,
@@ -34,12 +38,14 @@ pub struct JsonRpcResponse<T> {
     pub error: Option<JsonRpcError>,
 }
 
+/// A JSON-RPC error object (`code` and `message`).
 #[derive(Debug, Clone, Deserialize)]
 pub struct JsonRpcError {
     pub code: i64,
     pub message: String,
 }
 
+/// The result of `getVersion`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct VersionInfo {
     #[serde(rename = "solana-core")]
@@ -48,11 +54,13 @@ pub struct VersionInfo {
     pub feature_set: Option<u64>,
 }
 
+/// The result of `getLatestBlockhash`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct LatestBlockhashResponse {
     pub value: LatestBlockhashValue,
 }
 
+/// The `value` payload of a `getLatestBlockhash` response.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct LatestBlockhashValue {
     pub blockhash: String,
@@ -60,11 +68,13 @@ pub struct LatestBlockhashValue {
     pub last_valid_block_height: u64,
 }
 
+/// The result of `isBlockhashValid`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct BlockhashValidResponse {
     pub value: bool,
 }
 
+/// One entry from `getRecentPerformanceSamples`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct PerformanceSample {
     pub slot: u64,

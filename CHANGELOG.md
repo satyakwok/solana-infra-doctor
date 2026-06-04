@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.5.0 - Unreleased
+
+- Redesign human terminal output into a concise, scannable default: a per-category
+  summary for `check`, a one-row-per-endpoint summary table for `compare`, and a
+  compact step table for `ws`. Drop decorative rules; use whitespace and headings.
+- Add a global `-v`/`--verbose` flag that expands human output with full per-check
+  detail (full redacted URL, per-method latencies, full hashes, per-endpoint
+  detail, notes). It affects human output only; `--json` is unchanged and takes
+  precedence.
+- Hide full genesis hashes, blockhashes, and full URLs in the concise view
+  (showing a safe hostname label); the full redacted URL and hashes remain
+  available with `--verbose` and in JSON.
+- Standardize the status vocabulary: overall `GOOD`/`WARNING`/`BAD`/`UNKNOWN`,
+  per-check `PASS`/`WARN`/`FAIL`/`SKIP`; format units with a space (`13 ms`),
+  use sentence-case summaries, and prefer "First notification" wording for the
+  WebSocket time-to-first-event step.
+- Honor `TERM=dumb` (in addition to `NO_COLOR`) when resolving `--color auto`.
+- Add the [CLI Output Guide](docs/cli-output.md) and
+  [screenshot reproducibility notes](docs/readme-screenshots.md), a
+  `scripts/capture-readme-screenshots.sh` helper, and refresh the README preview
+  with real, live screenshots of the new output.
+- Documentation only: no change to diagnostic logic, scoring, ranking, exit
+  codes, or the JSON/Markdown shape (summary wording values are updated to match
+  the human output).
+
 ## 0.4.0 - 2026-06-04
 
 - Add TTY-aware, semantic color to human terminal output for `check`, `compare`,

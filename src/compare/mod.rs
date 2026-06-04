@@ -1,3 +1,7 @@
+//! Multi-endpoint comparison: run the per-endpoint checks, score each endpoint
+//! for a workload profile, rank them, and produce a [`CompareReport`]. Rendering
+//! lives in [`render`] and scoring in [`scoring`].
+
 use crate::{
     checks::{run_check, CheckReport, CheckStatus},
     cli::{CheckArgs, CompareArgs, CompareProfile},
@@ -15,17 +19,28 @@ pub use scoring::*;
 const MISMATCH_REASON: &str =
     "Endpoints returned different genesis hashes, indicating different Solana networks.";
 
+/// The full result of comparing multiple RPC endpoints. This is the serialized
+/// shape emitted by `--json`.
 #[derive(Debug, Clone, Serialize)]
 pub struct CompareReport {
+    /// The workload profile used for scoring.
     pub profile: CompareProfileSummary,
+    /// Per-endpoint results, in the order the endpoints were supplied.
     pub endpoints: Vec<CompareEndpoint>,
+    /// Index (1-based) of the highest-scoring endpoint, if ranking is possible.
     pub best_endpoint_index: Option<usize>,
+    /// Index (1-based) of the lowest-scoring endpoint, if ranking is possible.
     pub worst_endpoint_index: Option<usize>,
+    /// Whether the endpoints are on different Solana networks (ranking disabled).
     pub network_mismatch: bool,
+    /// Why a comparison was rejected, when `network_mismatch` is set.
     pub mismatch_reason: Option<String>,
+    /// Human-readable recommendation text.
     pub recommendation: String,
 }
 
+/// The workload profile a comparison was scored for. Mirrors
+/// [`CompareProfile`](crate::cli::CompareProfile) in the serialized report.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CompareProfileSummary {
@@ -37,6 +52,7 @@ pub enum CompareProfileSummary {
 }
 
 impl CompareProfileSummary {
+    /// The lowercase profile name (`general`, `wallet`, `bot`, `indexer`, `ci`).
     pub fn label(self) -> &'static str {
         match self {
             Self::General => "general",
@@ -60,21 +76,35 @@ impl From<CompareProfile> for CompareProfileSummary {
     }
 }
 
+/// One endpoint's result within a [`CompareReport`].
 #[derive(Debug, Clone, Serialize)]
 pub struct CompareEndpoint {
+    /// 1-based position in the supplied endpoint list.
     pub index: usize,
+    /// The redacted endpoint URL.
     pub url: String,
+    /// The endpoint's genesis hash, used for network-mismatch detection.
     pub genesis_hash: Option<String>,
+    /// The endpoint's single-endpoint readiness verdict.
     pub verdict: Verdict,
+    /// Workload score from `0` to `100`.
     pub score: u8,
+    /// The endpoint's observed slot, if available.
     pub slot: Option<u64>,
+    /// Slots behind the freshest endpoint (`0` = freshest), when comparable.
     pub slot_lag: Option<u64>,
+    /// Mean per-check latency in milliseconds.
     pub average_latency_ms: Option<u128>,
+    /// Names of the checks that failed.
     pub failed_checks: Vec<String>,
+    /// Whether the latest blockhash validated.
     pub blockhash_valid: bool,
+    /// Profile-specific advisory notes for this endpoint.
     pub notes: Vec<String>,
 }
 
+/// Run the per-endpoint checks for every supplied URL and build a ranked
+/// [`CompareReport`] for the requested workload profile.
 pub async fn run_compare(args: CompareArgs) -> Result<CompareReport, AppError> {
     if args.rpc.len() < 2 {
         return Err(AppError::CompareRequiresTwoRpcUrls);
@@ -96,6 +126,9 @@ pub async fn run_compare(args: CompareArgs) -> Result<CompareReport, AppError> {
     Ok(build_compare_report(args.profile, &check_reports))
 }
 
+/// Build a [`CompareReport`] from already-computed per-endpoint [`CheckReport`]s:
+/// score and rank each endpoint, detect a network mismatch, and assemble the
+/// recommendation. Separated from [`run_compare`] so it can be tested offline.
 pub fn build_compare_report(profile: CompareProfile, reports: &[CheckReport]) -> CompareReport {
     let network_mismatch = has_genesis_mismatch(reports);
     // Slot lag across different networks is meaningless, so suppress the shared
@@ -214,6 +247,7 @@ fn build_endpoint(
     endpoint
 }
 
+/// Slots an endpoint is behind the freshest observed slot (`0` = freshest).
 pub fn slot_lag(slot: Option<u64>, highest_slot: Option<u64>) -> Option<u64> {
     match (slot, highest_slot) {
         (Some(slot), Some(highest)) => Some(highest.saturating_sub(slot)),
