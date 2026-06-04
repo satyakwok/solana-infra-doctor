@@ -19,6 +19,48 @@ impl Latency {
     }
 }
 
+/// A percentile summary of repeated latency samples, in milliseconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LatencyStats {
+    /// Number of samples collected.
+    pub count: usize,
+    /// Fastest sample.
+    pub min_ms: u128,
+    /// Median (50th percentile).
+    pub p50_ms: u128,
+    /// 95th percentile — the tail latency a single sample tends to hide.
+    pub p95_ms: u128,
+    /// Slowest sample.
+    pub max_ms: u128,
+}
+
+impl LatencyStats {
+    /// Compute the summary from latency samples (milliseconds), or `None` when
+    /// there are no samples. Percentiles use the nearest-rank method over the
+    /// sorted samples.
+    pub fn from_samples(samples: &[u128]) -> Option<Self> {
+        if samples.is_empty() {
+            return None;
+        }
+        let mut sorted = samples.to_vec();
+        sorted.sort_unstable();
+        let count = sorted.len();
+        // Nearest-rank: rank = ceil(p/100 * count), clamped to [1, count].
+        let nearest_rank = |percentile: u128| {
+            let rank = (percentile * count as u128).div_ceil(100);
+            let index = rank.clamp(1, count as u128) as usize - 1;
+            sorted[index]
+        };
+        Some(Self {
+            count,
+            min_ms: sorted[0],
+            p50_ms: nearest_rank(50),
+            p95_ms: nearest_rank(95),
+            max_ms: sorted[count - 1],
+        })
+    }
+}
+
 /// The mean of the given latencies in milliseconds, or `None` when the iterator
 /// is empty.
 pub fn average_latency_ms(latencies: impl IntoIterator<Item = Latency>) -> Option<u128> {

@@ -31,6 +31,7 @@
 //!     rpc: "https://api.mainnet-beta.solana.com".to_string(),
 //!     json: false,
 //!     fail_on_warning: false,
+//!     samples: 1,
 //!     timeout_ms: 5_000,
 //! })
 //! .await?;

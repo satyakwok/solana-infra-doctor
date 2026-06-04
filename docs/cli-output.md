@@ -57,6 +57,15 @@ blockhashes, per-endpoint detail in compare mode, and diagnostic notes.
 when combined with `--json` the JSON output is unchanged (JSON takes precedence —
 `--verbose` is ignored for JSON).
 
+### `--samples <N>` (check)
+
+`check --samples <N>` probes round-trip latency `N` times (lightweight
+`getHealth` calls) and reports percentiles, since a single sample hides tail
+latency. It adds a `Samples` line to human output (`p50 … · p95 …`, plus
+`min`/`max` under `--verbose`) and a `latency_samples` object to JSON. The
+default is a single sample; `--samples` is presentation/diagnostic only and does
+not change the verdict.
+
 ### `--color auto|always|never`
 
 - `auto` (default) — color only when stdout is a terminal. It is automatically

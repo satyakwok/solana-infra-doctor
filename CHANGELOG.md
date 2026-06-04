@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 - 2026-06-04
+
+- Add `check --samples <N>`: probe round-trip latency `N` times (lightweight
+  `getHealth` calls) and report `p50`/`p95` percentiles (plus `min`/`max` under
+  `--verbose`), since a single sample hides tail latency. Adds a `Samples` line
+  to human output and an additive `latency_samples` object to JSON. The default
+  is a single sample, and the flag does not change the verdict, scoring, or exit
+  codes.
+
 ## 0.5.1 - 2026-06-04
 
 - Fix the README CLI screenshots, which were captured with a proportional font

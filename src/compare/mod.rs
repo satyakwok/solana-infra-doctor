@@ -117,6 +117,7 @@ pub async fn run_compare(args: CompareArgs) -> Result<CompareReport, AppError> {
                 rpc,
                 json: false,
                 fail_on_warning: false,
+                samples: 1,
                 timeout_ms: args.timeout_ms,
             })
             .await?,

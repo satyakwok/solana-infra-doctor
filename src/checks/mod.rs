@@ -4,7 +4,7 @@
 use crate::{
     cli::CheckArgs,
     error::AppError,
-    latency::{average_latency_ms, Latency},
+    latency::{average_latency_ms, Latency, LatencyStats},
     rpc::{
         BlockhashValidResponse, JsonRpcRequest, JsonRpcResponse, LatestBlockhashResponse,
         PerformanceSample, RpcClient, RpcEndpoint, VersionInfo,
@@ -31,6 +31,8 @@ pub struct CheckReport {
     pub summary: String,
     /// Mean latency across the individual checks, if any succeeded.
     pub average_latency_ms: Option<u128>,
+    /// Percentile latency summary from repeat sampling (`--samples`), if requested.
+    pub latency_samples: Option<LatencyStats>,
     /// Whether `--fail-on-warning` was set (surfaced for CI context).
     pub fail_on_warning: bool,
     /// The individual per-method check results.
@@ -164,6 +166,7 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
                 rpc_url: "<invalid>".to_string(),
                 summary: format!("invalid RPC URL: {reason}"),
                 average_latency_ms: None,
+                latency_samples: None,
                 fail_on_warning: args.fail_on_warning,
                 checks: vec![RpcCheck::failed(
                     CheckCategory::Core,
@@ -200,6 +203,15 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
             .iter()
             .filter_map(|check| check.latency_ms.map(|millis| Latency { millis })),
     );
+
+    // Optional repeat-sampling latency probe (`--samples`). The verdict is still
+    // driven by the per-check results; this only enriches the latency picture.
+    let latency_samples = if args.samples > 1 {
+        probe_latency(&client, args.samples).await
+    } else {
+        None
+    };
+
     let verdict = calculate_verdict(&checks, average_latency_ms);
     let summary = summarize(verdict, &checks, average_latency_ms, args.fail_on_warning);
 
@@ -208,9 +220,28 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
         rpc_url: redacted_rpc_url,
         summary,
         average_latency_ms,
+        latency_samples,
         fail_on_warning: args.fail_on_warning,
         checks,
     })
+}
+
+/// Probe round-trip latency by sending `samples` lightweight `getHealth`
+/// requests and summarizing the measured latencies. Failed probes are skipped;
+/// returns `None` if none succeeded. Presentation/diagnostic only — it does not
+/// affect the verdict.
+async fn probe_latency(client: &RpcClient, samples: u32) -> Option<LatencyStats> {
+    let mut measured = Vec::with_capacity(samples as usize);
+    for _ in 0..samples {
+        // `getHealth` is the lightest method; id 1 matches the getHealth check
+        // (a JSON-RPC server echoes the request id).
+        if let Ok((_response, latency)) =
+            call_rpc::<String>(client, 1, "getHealth", Vec::new()).await
+        {
+            measured.push(latency.millis);
+        }
+    }
+    LatencyStats::from_samples(&measured)
 }
 
 async fn check_health(client: &RpcClient) -> RpcCheck {
@@ -624,6 +655,7 @@ mod tests {
             rpc: url,
             json: false,
             fail_on_warning: false,
+            samples: 1,
             timeout_ms: 1_000,
         }
     }

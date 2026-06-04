@@ -10,7 +10,7 @@ use solana_infra_doctor::{
         render_json as render_compare_json, render_markdown, run_compare, score_endpoint, slot_lag,
         write_markdown_report, CompareEndpoint, CompareProfileSummary, CompareReport,
     },
-    latency::{average_latency_ms, Latency},
+    latency::{average_latency_ms, Latency, LatencyStats},
     redact::{redact_text, redact_url},
     report::{render_human, render_json},
     rpc::{
@@ -138,6 +138,7 @@ fn args_for(url: String) -> CheckArgs {
         rpc: url,
         json: false,
         fail_on_warning: false,
+        samples: 1,
         timeout_ms: 1_000,
     }
 }
@@ -437,6 +438,7 @@ fn verdict_latency_and_report_helpers_are_covered() {
         rpc_url: "https://api.mainnet-beta.solana.com/".to_string(),
         summary: "RPC checks succeeded, but average latency is elevated at 600ms".to_string(),
         average_latency_ms: None,
+        latency_samples: None,
         fail_on_warning: true,
         checks: vec![success, failed],
     };
@@ -600,6 +602,7 @@ fn compare_check_report(
         rpc_url: url.to_string(),
         summary: verdict.to_string(),
         average_latency_ms,
+        latency_samples: None,
         fail_on_warning: false,
         checks,
     }
@@ -1083,6 +1086,7 @@ async fn check_does_not_leak_secret_in_error_output() {
         rpc: format!("https://127.0.0.1:{port}/?api-key=FAKE_SECRET_123"),
         json: false,
         fail_on_warning: false,
+        samples: 1,
         timeout_ms: 1_500,
     })
     .await
@@ -1966,4 +1970,69 @@ fn human_output_columns_align_with_and_without_color() {
     assert!(!ws_render_json(&ws).unwrap().contains('\x1b'));
     assert!(!render_markdown(&compare).contains('\x1b'));
     assert!(!render_markdown(&compare).contains('\t'));
+}
+
+#[test]
+fn latency_stats_percentiles_and_empty() {
+    assert_eq!(LatencyStats::from_samples(&[]), None);
+
+    let single = LatencyStats::from_samples(&[42]).unwrap();
+    assert_eq!(single.count, 1);
+    assert_eq!(single.min_ms, 42);
+    assert_eq!(single.p50_ms, 42);
+    assert_eq!(single.p95_ms, 42);
+    assert_eq!(single.max_ms, 42);
+
+    // Unsorted 20..=1; nearest-rank p50 = 10th value, p95 = 19th value.
+    let samples: Vec<u128> = (1..=20).rev().collect();
+    let stats = LatencyStats::from_samples(&samples).unwrap();
+    assert_eq!(stats.count, 20);
+    assert_eq!(stats.min_ms, 1);
+    assert_eq!(stats.max_ms, 20);
+    assert_eq!(stats.p50_ms, 10);
+    assert_eq!(stats.p95_ms, 19);
+}
+
+#[tokio::test]
+async fn check_with_samples_probes_latency() {
+    // 7 normal check responses, then `samples` extra getHealth responses for the
+    // latency probe.
+    let mut responses = healthy_rpc_responses(347_000_000);
+    for _ in 0..5 {
+        responses.push(MockResponse::ok(health_ok()));
+    }
+    let server = MockRpcServer::start(responses);
+
+    let mut args = args_for(server.url.clone());
+    args.samples = 5;
+    let report = run_check(args).await.unwrap();
+    server.join();
+
+    assert_eq!(report.verdict, Verdict::Good);
+    let stats = report.latency_samples.expect("samples were requested");
+    assert_eq!(stats.count, 5);
+    assert!(stats.min_ms <= stats.p50_ms);
+    assert!(stats.p50_ms <= stats.p95_ms);
+    assert!(stats.p95_ms <= stats.max_ms);
+
+    // Concise output shows p50/p95; verbose adds min/max; JSON carries the object.
+    let concise = render_human(&report, plain(), false);
+    assert!(concise.contains("Samples"));
+    assert!(concise.contains("p50"));
+    assert!(concise.contains("p95"));
+    let verbose = render_human(&report, plain(), true);
+    assert!(verbose.contains("min"));
+    assert!(verbose.contains("max"));
+    let json = render_json(&report).unwrap();
+    assert!(json.contains("\"latency_samples\""));
+    assert!(json.contains("\"p95_ms\""));
+}
+
+#[tokio::test]
+async fn check_without_samples_has_no_latency_samples() {
+    let server = MockRpcServer::start(healthy_rpc_responses(347_000_000));
+    let report = run_check(args_for(server.url.clone())).await.unwrap();
+    server.join();
+    assert!(report.latency_samples.is_none());
+    assert!(!render_human(&report, plain(), false).contains("Samples"));
 }
