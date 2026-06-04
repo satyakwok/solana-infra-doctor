@@ -47,22 +47,71 @@ Bandingkan dua endpoint untuk sebuah workload (`sol-doctor compare --profile bot
 — endpoint yang lebih cepat tidak otomatis menang kalau slot yang disajikannya
 lebih basi:
 
-![tabel ringkasan sol-doctor compare membandingkan dua endpoint RPC mainnet untuk profil bot](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/images/cli/compare.png)
+```text
+Solana Infra Doctor · RPC Comparison
+
+Profile: bot
+
+RPC   Endpoint                      Verdict   Score     Latency   Slot lag
+#1    api.mainnet-beta.solana.com   GOOD      99/100    16 ms     32 behind
+#2    solana-rpc.publicnode.com     GOOD      100/100   105 ms    baseline
+
+Recommendation
+Best RPC: #2 · solana-rpc.publicnode.com
+RPC #2 is recommended for bot workloads.
+RPC #1 has lower latency, but RPC #2 is fresher. For bot workloads, slot freshness may matter more than raw HTTP latency.
+```
 
 Mendiagnosis satu endpoint (`sol-doctor check`):
 
-![ringkasan kesiapan sol-doctor check untuk satu endpoint RPC mainnet](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/images/cli/check.png)
+```text
+Solana Infra Doctor · RPC Readiness
+
+Target
+Endpoint   api.mainnet-beta.solana.com
+
+Result
+GOOD         All RPC readiness checks passed
+Latency      10 ms average
+Checks       11 passed · 0 failed
+Block time   13s behind (finalized)
+Fee market   median 0 micro-lamports/CU
+Token        Token Program ready · Token-2022 ready
+
+Checks
+Category       Status    Summary
+Core           PASS      4 / 4
+Blockhash      PASS      2 / 2
+Performance    PASS      3 / 3
+Token          PASS      2 / 2
+```
 
 Memeriksa kesiapan realtime WebSocket (`sol-doctor ws`):
 
-![ringkasan kesiapan sol-doctor ws menampilkan langkah connect, subscribe, dan notifikasi pertama](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/images/cli/ws.png)
+```text
+Solana Infra Doctor · WebSocket Readiness
 
-Screenshot di atas adalah run nyata terhadap endpoint publik. Nilainya bervariasi
-menurut waktu, region, dan kondisi endpoint. Ini adalah snapshot diagnostik,
-bukan jaminan dari provider. Tampilan default ringkas; jalankan dengan
-`--verbose` untuk detail penuh per-pemeriksaan. Lihat
-[CLI Output Guide](docs/cli-output.md) dan
-[cara screenshot ini dibuat](docs/readme-screenshots.md).
+Target
+RPC         api.mainnet-beta.solana.com
+WebSocket   wss://api.mainnet-beta.solana.com/
+
+Result
+GOOD   WebSocket readiness checks passed
+
+Checks
+Check                 Status    Detail
+Connect               PASS      94 ms
+Subscribe             PASS      slotSubscribe · id 1
+First notification    PASS      132 ms · slot 424282423
+Unsubscribe           PASS
+Close                 PASS
+```
+
+Ini run nyata terhadap endpoint publik. Nilainya bervariasi menurut waktu,
+region, dan kondisi endpoint; ini snapshot diagnostik, bukan jaminan provider.
+Tampilan default ringkas (yang ditampilkan di sini); jalankan dengan `--verbose`
+untuk detail penuh per-pemeriksaan (lihat contoh verbose di bawah). Lihat
+[CLI Output Guide](docs/cli-output.md).
 
 ## Instalasi
 
@@ -400,35 +449,9 @@ lengkap.
 
 ## Contoh Output Human
 
-Run nyata terhadap `https://api.mainnet-beta.solana.com`. Tampilan default ringkas
-(di terminal akan berwarna; lihat [Pratinjau CLI](#pratinjau-cli)):
-
-```text
-Solana Infra Doctor · RPC Readiness
-
-Target
-Endpoint   api.mainnet-beta.solana.com
-
-Result
-GOOD         All RPC readiness checks passed
-Latency      10 ms average
-Checks       11 passed · 0 failed
-Block time   13s behind (finalized)
-Fee market   median 0 micro-lamports/CU
-Token        Token Program ready · Token-2022 ready
-
-Checks
-Category       Status    Summary
-Core           PASS      4 / 4
-Blockhash      PASS      2 / 2
-Performance    PASS      3 / 3
-Token          PASS      2 / 2
-
-Tip: run with --verbose to see full details.
-```
-
-Jalankan dengan `--verbose` untuk detail penuh per-pemeriksaan (URL ter-redaksi
-penuh, latency per-method, hash penuh):
+Run `--verbose` nyata terhadap `https://api.mainnet-beta.solana.com`, menampilkan
+detail penuh per-pemeriksaan (URL ter-redaksi penuh, latency per-method, hash
+penuh). Versi ringkas default ada di [Pratinjau CLI](#pratinjau-cli) di atas:
 
 ```text
 Solana Infra Doctor · RPC Readiness
@@ -468,26 +491,50 @@ Token
 
 ## Contoh Output Compare
 
-Perbandingan profil `bot` nyata atas dua endpoint mainnet publik. Perhatikan
-bahwa endpoint dengan latency lebih rendah (#1) bukan pemenangnya: #2 menyajikan
-slot yang lebih segar, yang ditimbang lebih berat oleh profil `bot`. (Jalankan
-dengan `--verbose` untuk detail penuh per-endpoint.)
+Perbandingan profil `bot` nyata (`--verbose`) atas dua endpoint mainnet publik,
+dengan detail penuh per-endpoint. Endpoint dengan latency lebih rendah (#1) bukan
+pemenangnya: #2 menyajikan slot yang lebih segar, yang ditimbang lebih berat oleh
+profil `bot`. (Tabel ringkasnya ada di [Pratinjau CLI](#pratinjau-cli) di atas.)
 
 ```text
 Solana Infra Doctor · RPC Comparison
 
 Profile: bot
 
-RPC   Endpoint                      Verdict   Score     Latency   Slot lag
-#1    api.mainnet-beta.solana.com   GOOD      99/100    16 ms     32 behind
-#2    solana-rpc.publicnode.com     GOOD      100/100   105 ms    baseline
+RPC #1
+URL                   https://api.mainnet-beta.solana.com/
+Genesis               5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+Verdict               GOOD
+Score                 99/100
+Slot                  424282690
+Slot lag              32 slots behind
+Average latency       18 ms
+Block time lag        15s behind
+Median priority fee   0 micro-lamports/CU
+Token Program         ready
+Token-2022            ready
+Failed checks         none
+Blockhash valid       yes
+
+RPC #2
+URL                   https://solana-rpc.publicnode.com/
+Genesis               5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+Verdict               GOOD
+Score                 100/100
+Slot                  424282722
+Slot lag              baseline
+Average latency       95 ms
+Block time lag        2s behind
+Median priority fee   0 micro-lamports/CU
+Token Program         ready
+Token-2022            ready
+Failed checks         none
+Blockhash valid       yes
 
 Recommendation
 Best RPC: #2 · solana-rpc.publicnode.com
 RPC #2 is recommended for bot workloads.
 RPC #1 has lower latency, but RPC #2 is fresher. For bot workloads, slot freshness may matter more than raw HTTP latency.
-
-Tip: run with --verbose to see full details per endpoint.
 ```
 
 ## Contoh Output JSON

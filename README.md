@@ -46,21 +46,70 @@ It is local-first, dependency-light, and built on raw HTTP JSON-RPC via
 Compare two endpoints for a workload (`sol-doctor compare --profile bot`) — the
 faster endpoint is not automatically the winner when it serves staler slots:
 
-![sol-doctor compare summary table comparing two mainnet RPC endpoints for the bot profile](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/images/cli/compare.png)
+```text
+Solana Infra Doctor · RPC Comparison
+
+Profile: bot
+
+RPC   Endpoint                      Verdict   Score     Latency   Slot lag
+#1    api.mainnet-beta.solana.com   GOOD      99/100    16 ms     32 behind
+#2    solana-rpc.publicnode.com     GOOD      100/100   105 ms    baseline
+
+Recommendation
+Best RPC: #2 · solana-rpc.publicnode.com
+RPC #2 is recommended for bot workloads.
+RPC #1 has lower latency, but RPC #2 is fresher. For bot workloads, slot freshness may matter more than raw HTTP latency.
+```
 
 Diagnose a single endpoint (`sol-doctor check`):
 
-![sol-doctor check readiness summary for a mainnet RPC endpoint](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/images/cli/check.png)
+```text
+Solana Infra Doctor · RPC Readiness
+
+Target
+Endpoint   api.mainnet-beta.solana.com
+
+Result
+GOOD         All RPC readiness checks passed
+Latency      10 ms average
+Checks       11 passed · 0 failed
+Block time   13s behind (finalized)
+Fee market   median 0 micro-lamports/CU
+Token        Token Program ready · Token-2022 ready
+
+Checks
+Category       Status    Summary
+Core           PASS      4 / 4
+Blockhash      PASS      2 / 2
+Performance    PASS      3 / 3
+Token          PASS      2 / 2
+```
 
 Check WebSocket realtime readiness (`sol-doctor ws`):
 
-![sol-doctor ws readiness summary showing connect, subscribe, and first notification steps](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/images/cli/ws.png)
+```text
+Solana Infra Doctor · WebSocket Readiness
 
-Screenshots are real runs against public endpoints. Values vary by time, region,
-and endpoint conditions. They are diagnostic snapshots, not provider guarantees.
-The default view is concise; run with `--verbose` for full per-check detail. See
-the [CLI Output Guide](docs/cli-output.md) and
-[how these screenshots are made](docs/readme-screenshots.md).
+Target
+RPC         api.mainnet-beta.solana.com
+WebSocket   wss://api.mainnet-beta.solana.com/
+
+Result
+GOOD   WebSocket readiness checks passed
+
+Checks
+Check                 Status    Detail
+Connect               PASS      94 ms
+Subscribe             PASS      slotSubscribe · id 1
+First notification    PASS      132 ms · slot 424282423
+Unsubscribe           PASS
+Close                 PASS
+```
+
+These are real runs against public endpoints. Values vary by time, region, and
+endpoint conditions; they are diagnostic snapshots, not provider guarantees. The
+concise default is shown here; run with `--verbose` for full per-check detail
+(see the verbose examples below). See the [CLI Output Guide](docs/cli-output.md).
 
 ## Install
 
@@ -394,35 +443,9 @@ is off, the output is byte-for-byte identical to the uncolored output. See the
 
 ## Human Output Example
 
-A real run against `https://api.mainnet-beta.solana.com`. The default view is
-concise (on a terminal it is colorized; see the [CLI Preview](#cli-preview)):
-
-```text
-Solana Infra Doctor · RPC Readiness
-
-Target
-Endpoint   api.mainnet-beta.solana.com
-
-Result
-GOOD         All RPC readiness checks passed
-Latency      10 ms average
-Checks       11 passed · 0 failed
-Block time   13s behind (finalized)
-Fee market   median 0 micro-lamports/CU
-Token        Token Program ready · Token-2022 ready
-
-Checks
-Category       Status    Summary
-Core           PASS      4 / 4
-Blockhash      PASS      2 / 2
-Performance    PASS      3 / 3
-Token          PASS      2 / 2
-
-Tip: run with --verbose to see full details.
-```
-
-Run with `--verbose` for full per-check detail (full redacted URL, per-method
-latencies, full hashes):
+A real `--verbose` run against `https://api.mainnet-beta.solana.com`, showing
+full per-check detail (full redacted URL, per-method latencies, full hashes). The
+concise default is shown in the [CLI Preview](#cli-preview) above:
 
 ```text
 Solana Infra Doctor · RPC Readiness
@@ -462,26 +485,50 @@ Token
 
 ## Compare Output Example
 
-A real `bot`-profile comparison of two public mainnet endpoints. Note that the
-lower-latency endpoint (#1) is not the winner: #2 serves fresher slots, which the
-`bot` profile weighs more heavily. (Run with `--verbose` for full per-endpoint
-detail.)
+A real `--verbose` `bot`-profile comparison of two public mainnet endpoints, with
+full per-endpoint detail. The lower-latency endpoint (#1) is not the winner: #2
+serves fresher slots, which the `bot` profile weighs more heavily. (The concise
+table is in the [CLI Preview](#cli-preview) above.)
 
 ```text
 Solana Infra Doctor · RPC Comparison
 
 Profile: bot
 
-RPC   Endpoint                      Verdict   Score     Latency   Slot lag
-#1    api.mainnet-beta.solana.com   GOOD      99/100    16 ms     32 behind
-#2    solana-rpc.publicnode.com     GOOD      100/100   105 ms    baseline
+RPC #1
+URL                   https://api.mainnet-beta.solana.com/
+Genesis               5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+Verdict               GOOD
+Score                 99/100
+Slot                  424282690
+Slot lag              32 slots behind
+Average latency       18 ms
+Block time lag        15s behind
+Median priority fee   0 micro-lamports/CU
+Token Program         ready
+Token-2022            ready
+Failed checks         none
+Blockhash valid       yes
+
+RPC #2
+URL                   https://solana-rpc.publicnode.com/
+Genesis               5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+Verdict               GOOD
+Score                 100/100
+Slot                  424282722
+Slot lag              baseline
+Average latency       95 ms
+Block time lag        2s behind
+Median priority fee   0 micro-lamports/CU
+Token Program         ready
+Token-2022            ready
+Failed checks         none
+Blockhash valid       yes
 
 Recommendation
 Best RPC: #2 · solana-rpc.publicnode.com
 RPC #2 is recommended for bot workloads.
 RPC #1 has lower latency, but RPC #2 is fresher. For bot workloads, slot freshness may matter more than raw HTTP latency.
-
-Tip: run with --verbose to see full details per endpoint.
 ```
 
 ## JSON Output Example
