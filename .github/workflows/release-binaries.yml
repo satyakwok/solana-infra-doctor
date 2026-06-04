@@ -1,14 +1,17 @@
 # Build prebuilt `sol-doctor` binaries and attach them to the GitHub Release.
 #
-# Triggers on a pushed `v*` tag (the release tag created after a crates.io
-# publish) so each release gains downloadable binaries and `cargo binstall`
-# support. Can also be run manually against an existing tag via workflow_dispatch.
+# Triggers on a pushed semver release tag (`vX.Y.Z`, the tag created after a
+# crates.io publish) so each release gains downloadable binaries and `cargo
+# binstall` support. The pattern deliberately excludes the moving major tag
+# (`v1`) used by the GitHub Action: it is not a release and the upload action
+# rejects it as non-semver, which would surface a spurious failing run on every
+# release. Can also be run manually against an existing tag via workflow_dispatch.
 name: Release binaries
 
 on:
   push:
     tags:
-      - "v*"
+      - "v*.*.*"
   workflow_dispatch:
 
 # Least privilege: upload assets to the release for the current tag.
