@@ -136,10 +136,12 @@ jobs:
       - name: Inspect package contents
         run: |
           set -euo pipefail
-          cargo package --list > package-files.txt
+          # Capture into a variable, not a file: writing into the working tree
+          # would make `cargo package` see an untracked file and refuse to run.
+          files="$(cargo package --list)"
           echo "Packaged files:"
-          cat package-files.txt
-          if grep -Eq '(^|/)(lcov\.info|AGENTS\.md|CLAUDE\.md|PROJECT_CONTEXT\.local\.md)$|(^|/)\.claude/|(^|/)target/|\.png$' package-files.txt; then
+          printf '%s\n' "$files"
+          if grep -Eq '(^|/)(lcov\.info|AGENTS\.md|CLAUDE\.md|PROJECT_CONTEXT\.local\.md)$|(^|/)\.claude/|(^|/)target/|\.png$' <<<"$files"; then
             echo "::error::Forbidden file found in package contents."
             exit 1
           fi
