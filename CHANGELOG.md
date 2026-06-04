@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.10.0 - 2026-06-04
+
+- Attach **prebuilt `sol-doctor` binaries** to each GitHub Release and add
+  `cargo binstall` support, so the CLI can be installed without compiling from
+  source. A new `release-binaries` workflow builds per-target archives
+  (`sol-doctor-<target>`) on each pushed `v*` tag, and
+  `[package.metadata.binstall]` points `cargo binstall solana-infra-doctor` at
+  them (zip on Windows, tgz elsewhere). No crate runtime, CLI, output, or
+  JSON-shape changes.
+- Add a **composite GitHub Action** (`action.yml`) that installs `sol-doctor`
+  via `cargo binstall` and runs it, so a workflow can gate a job on Solana RPC
+  readiness using the verdict exit code (`0` GOOD / `1` WARNING / `2` BAD /
+  `3` UNKNOWN). Inputs cover `command` (`check`/`ws`/`compare`), `rpc`,
+  `fail-on-warning`, `samples`, `timeout-ms`, `json`, `verbose`, `version`, and
+  a raw `args` passthrough; every input is passed through the environment
+  (never interpolated into the shell body) to prevent injection. A self-test
+  workflow exercises the action against a public RPC.
+- Gate the action's `--fail-on-warning` and `--samples` inputs on
+  `command: check` — they do not exist on `ws`/`compare`, where they would be a
+  parse error — and document the moving `@v1` tag alongside pinned release tags.
+
 ## 0.8.0 - 2026-06-04
 
 - Add **SPL Token Program** and **Token-2022** readiness checks: a new `Token`
