@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Run `compare` endpoint checks **concurrently** instead of sequentially, so the
+  total time is bounded by the slowest endpoint rather than their sum. Endpoint
+  order and the first-error behavior are unchanged.
+- Add per-endpoint **resilience** to the HTTP RPC client: a token-bucket rate
+  limiter (politeness toward public RPCs, mainly for heavy `--samples` runs) and
+  exponential-backoff retry on transient failures (timeouts, connection errors,
+  HTTP 429). Retries never log the URL, preserving redaction. Built on the
+  dependency-free `reliakit-backoff` / `reliakit-ratelimit` crates.
+- Raise the minimum supported Rust version (MSRV) to 1.85 (required by the
+  reliakit crates). No CLI, output, or JSON-shape changes.
+
 ## 0.6.0 - 2026-06-04
 
 - Add `check --samples <N>`: probe round-trip latency `N` times (lightweight

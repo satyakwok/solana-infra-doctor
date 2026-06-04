@@ -105,24 +105,27 @@ pub struct CompareEndpoint {
 
 /// Run the per-endpoint checks for every supplied URL and build a ranked
 /// [`CompareReport`] for the requested workload profile.
+///
+/// Endpoints are checked **concurrently**: each endpoint's diagnostics run in
+/// parallel, so the total time is bounded by the slowest endpoint rather than
+/// the sum. `try_join_all` preserves the input order and surfaces the first
+/// error, matching the previous sequential behavior.
 pub async fn run_compare(args: CompareArgs) -> Result<CompareReport, AppError> {
     if args.rpc.len() < 2 {
         return Err(AppError::CompareRequiresTwoRpcUrls);
     }
 
-    let mut check_reports = Vec::with_capacity(args.rpc.len());
-    for rpc in args.rpc {
-        check_reports.push(
-            run_check(CheckArgs {
-                rpc,
-                json: false,
-                fail_on_warning: false,
-                samples: 1,
-                timeout_ms: args.timeout_ms,
-            })
-            .await?,
-        );
-    }
+    let timeout_ms = args.timeout_ms;
+    let checks = args.rpc.into_iter().map(|rpc| {
+        run_check(CheckArgs {
+            rpc,
+            json: false,
+            fail_on_warning: false,
+            samples: 1,
+            timeout_ms,
+        })
+    });
+    let check_reports = futures_util::future::try_join_all(checks).await?;
 
     Ok(build_compare_report(args.profile, &check_reports))
 }

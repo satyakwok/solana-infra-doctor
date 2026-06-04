@@ -9,7 +9,10 @@ use std::time::Duration;
 use url::Url;
 
 pub mod models;
+pub mod resilience;
 pub use models::*;
+
+use resilience::{is_transient, Resilience};
 
 /// A validated `http`/`https` RPC endpoint. Its `Debug` is redacted so credentials
 /// in the URL never leak through logging or panics.
@@ -66,11 +69,13 @@ impl RpcEndpoint {
     }
 }
 
-/// A `reqwest`-backed JSON-RPC client bound to a single [`RpcEndpoint`].
-#[derive(Debug, Clone)]
+/// A `reqwest`-backed JSON-RPC client bound to a single [`RpcEndpoint`], with a
+/// per-endpoint rate limiter and transient-error retry (see [`resilience`]).
+#[derive(Debug)]
 pub struct RpcClient {
     endpoint: RpcEndpoint,
     client: Client,
+    resilience: Resilience,
 }
 
 impl RpcClient {
@@ -81,11 +86,42 @@ impl RpcClient {
             .build()
             .map_err(AppError::HttpClient)?;
 
-        Ok(Self { endpoint, client })
+        Ok(Self {
+            endpoint,
+            client,
+            resilience: Resilience::new(),
+        })
     }
 
-    /// Send a JSON-RPC `request` and deserialize the typed response body.
+    /// Send a JSON-RPC `request` and deserialize the typed response body, pacing
+    /// the call through the rate limiter and retrying transient failures with
+    /// exponential backoff.
     pub async fn call<T>(
+        &self,
+        request: &JsonRpcRequest,
+    ) -> Result<JsonRpcResponse<T>, reqwest::Error>
+    where
+        T: DeserializeOwned,
+    {
+        let mut attempt = 0u32;
+        loop {
+            self.resilience.acquire().await;
+            match self.send_once::<T>(request).await {
+                Ok(response) => return Ok(response),
+                Err(error) => match self.resilience.retry_delay(attempt) {
+                    Some(delay) if is_transient(&error) => {
+                        // Never log the error itself — it carries the URL.
+                        tracing::debug!(retry = attempt + 1, "transient RPC error; retrying");
+                        tokio::time::sleep(delay).await;
+                        attempt += 1;
+                    }
+                    _ => return Err(error),
+                },
+            }
+        }
+    }
+
+    async fn send_once<T>(
         &self,
         request: &JsonRpcRequest,
     ) -> Result<JsonRpcResponse<T>, reqwest::Error>

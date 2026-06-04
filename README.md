@@ -302,7 +302,13 @@ Compare mode supports these profiles:
 Compare mode helps choose RPC endpoints for wallet, bot, indexer, and CI
 workloads by scoring each endpoint from `0` to `100`, calculating slot lag
 against the freshest observed endpoint, listing failed checks, and recommending
-the best and worst endpoint.
+the best and worst endpoint. Endpoints are checked **concurrently**, so the run
+takes about as long as the slowest endpoint rather than the sum of all of them.
+
+The HTTP client is also resilient: each endpoint is rate-limited (to stay polite
+toward public RPCs) and transient failures (timeouts, connection errors, HTTP
+429) are retried with exponential backoff. None of this changes the CLI, the
+verdict, or the output shape.
 
 Compare mode is intended for endpoints on the same Solana network. If endpoints
 return different genesis hashes, Solana Infra Doctor rejects the comparison
