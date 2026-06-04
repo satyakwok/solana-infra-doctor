@@ -9,9 +9,9 @@ repository = "https://github.com/satyakwok/solana-infra-doctor"
 readme = "README.md"
 keywords = ["solana", "rpc", "cli", "diagnostics", "rust"]
 categories = ["command-line-utilities", "development-tools"]
-# Screenshots are large and only used in the rendered README; keep them out of
-# the published crate.
-exclude = ["docs/images/"]
+# Screenshots and branding assets are large and only used in the rendered README
+# / GitHub pages; keep them out of the published crate.
+exclude = ["docs/images/", "assets/"]
 
 [[bin]]
 name = "sol-doctor"
