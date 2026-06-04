@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.1 - 2026-06-04
+
+- Fix the README CLI screenshots, which were captured with a proportional font
+  and appeared to have misaligned columns. The renderer already aligns columns
+  from plain (unstyled) text; the screenshot capture now pins an explicit
+  monospace font and the images are regenerated from real live runs. No
+  diagnostic, scoring, exit-code, JSON, or Markdown behavior changes.
+- Add deterministic column-alignment tests (ANSI-stripped, with color enabled
+  and disabled).
+- Add a manually triggered crates.io Trusted Publishing workflow
+  (`.github/workflows/publish-crates.yml`) that authenticates with a short-lived
+  OIDC token instead of a stored API token, and a maintainer release guide
+  (`docs/releasing.md`).
+
 ## 0.5.0 - 2026-06-04
 
 - Redesign human terminal output into a concise, scannable default: a per-category
