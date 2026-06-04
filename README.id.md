@@ -635,9 +635,8 @@ reproducible.
 
 ## Batasan Saat Ini
 
-- `check` dan `compare` memakai HTTP JSON-RPC; `sol-doctor ws` hanya mencakup
-  kesiapan WebSocket slot-subscription (belum ada subscription account/log/program).
-- Pemeriksaan compare saat ini berjalan sekuensial.
+- `check` dan `compare` memakai HTTP JSON-RPC; `sol-doctor ws` mencakup kesiapan
+  subscription slot dan logs (belum ada subscription account/program).
 - Skor adalah heuristik deterministik, bukan jaminan provider.
 - Ini CLI local-first, bukan layanan monitoring terhosting.
 - Kesiapan token memastikan akun program SPL Token dan Token-2022 disajikan;
@@ -687,19 +686,25 @@ secara lokal supaya artefak laporan tidak ikut di-commit.
 
 Berlandaskan kegunaan, bukan jumlah fitur.
 
+**Baru saja dirilis**
+
+- Mode sampling berulang (`--samples`) dengan persentil latency p50/p95.
+- Pemeriksaan kesiapan SPL Token dan Token-2022.
+- Wrapper GitHub Action dan binary prebuilt (`cargo binstall`) untuk CI dan
+  instalasi mudah.
+
 **Jangka dekat**
 
-- Mode sampling berulang untuk sinyal latency p50/p95 dan error-rate jendela
-  pendek yang lebih baik.
-- Template laporan yang lebih kaya.
-- Wrapper GitHub Action untuk CI.
-- Lebih banyak contoh laporan.
+- Sinyal error-rate jendela pendek saat sampling berulang.
+- Laporan Markdown untuk `check` (saat ini hanya `compare` yang menghasilkannya)
+  dan template laporan yang lebih kaya.
+- Lebih banyak contoh laporan dan dokumentasi terlokalisasi.
 
 **Nanti**
 
+- Subscription WebSocket tambahan (account/program), di luar slot dan logs.
 - File histori benchmark lokal opsional.
 - Playbook perbandingan provider.
-- Perbaikan instalasi/distribusi.
 
 **Belum sekarang**
 

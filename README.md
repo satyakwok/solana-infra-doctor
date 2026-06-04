@@ -627,9 +627,8 @@ specific release tag (e.g. `@v0.9.0`) for fully reproducible runs.
 
 ## Current Limitations
 
-- `check` and `compare` use HTTP JSON-RPC; `sol-doctor ws` covers slot-subscription
-  WebSocket readiness only (no account/log/program subscriptions yet).
-- Compare checks currently run sequentially.
+- `check` and `compare` use HTTP JSON-RPC; `sol-doctor ws` covers slot and logs
+  subscription readiness (no account/program subscriptions yet).
 - Scores are deterministic heuristics, not provider guarantees.
 - This is a local-first CLI, not a hosted monitoring service.
 - Token readiness confirms the SPL Token and Token-2022 program accounts are
@@ -679,19 +678,25 @@ report artifact is not committed.
 
 Grounded in usefulness, not feature count.
 
+**Recently shipped**
+
+- Repeat sampling mode (`--samples`) with p50/p95 latency percentiles.
+- SPL Token and Token-2022 readiness checks.
+- A GitHub Action wrapper and prebuilt binaries (`cargo binstall`) for CI and
+  easy install.
+
 **Near-term**
 
-- Repeat sampling mode for better p50/p95 latency and short-window error-rate
-  signals.
-- Richer report templates.
-- A GitHub Action wrapper for CI.
-- More example reports.
+- Short-window error-rate signals during repeat sampling.
+- A Markdown report for `check` (today only `compare` emits one) and richer
+  report templates.
+- More example reports and localized docs.
 
 **Later**
 
+- Additional WebSocket subscriptions (account/program), beyond slot and logs.
 - Optional local benchmark history file.
 - A provider comparison playbook.
-- Install/distribution improvements.
 
 **Not now**
 
