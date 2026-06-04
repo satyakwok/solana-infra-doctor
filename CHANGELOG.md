@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.0 - 2026-06-04
+
+- Add **SPL Token Program** and **Token-2022** readiness checks: a new `Token`
+  diagnostic category probes the canonical token program accounts
+  (`Tokenkeg…` and `TokenzQd…`) via `getAccountInfo`. An endpoint is "ready"
+  when it serves each account as an `executable` program with non-zero data
+  length, confirming the RPC can back token-touching workloads (wallets,
+  trading bots, token indexers).
+- These checks are **informational**: a failure caps the verdict at `WARNING`
+  rather than `BAD`. Profile scoring rewards token readiness for the `wallet`,
+  `bot`, and `indexer` profiles (neutral for `general`/`ci`), and those profiles
+  emit advisory notes when a program account is unavailable.
+- Readiness is surfaced in the `check` Result block and `Token` category table,
+  the verbose `compare` detail, JSON (`token_program_ready`, `token_2022_ready`),
+  and the Markdown report. No `solana-sdk` dependency is added; account data
+  length is derived from `space` with a hardened base64 fallback.
+
 ## 0.7.0 - 2026-06-04
 
 - Add two new diagnostic checks: **`getBlockTime`** (on the latest finalized
