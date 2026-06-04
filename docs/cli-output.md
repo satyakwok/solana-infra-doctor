@@ -108,9 +108,31 @@ stable field shape. Prefer it for any programmatic use, CI gates, or alerting.
 
 ## Markdown report
 
-`sol-doctor compare --report <path>` writes a shareable Markdown comparison
-report. It contains no ANSI codes, applies the same redaction, and is meant to be
-attached to a PR, ticket, or email.
+`sol-doctor compare --report <path>` and `sol-doctor grpc check --report <path>`
+write a shareable Markdown report. It contains no ANSI codes, applies the same
+redaction, and is meant to be attached to a PR, ticket, or email. The gRPC report
+carries a point-in-time diagnostic disclaimer.
+
+## Yellowstone gRPC output (`grpc check`)
+
+`sol-doctor grpc check` uses the same output system as the other commands: a
+concise default, a `--verbose` expansion, `--json`, and a `--report` Markdown
+file, all sharing the status vocabulary above (`PASS`/`WARN`/`FAIL`/`SKIP` and
+the `GOOD`/`WARNING`/`BAD`/`UNKNOWN` verdict).
+
+- **Concise:** a result roll-up (verdict, connect latency, unary pass/fail count,
+  stream first-event time, latest slot) plus a per-category table
+  (`Transport`, `Authentication`, `Unary`, `Stream`, `Freshness`, and
+  `Cross-check` when `--rpc` is supplied).
+- **`--verbose`:** the full redacted gRPC URL, per-method unary detail with
+  latency and the classified error kind, the HTTP RPC cross-check, warnings, and
+  remediation hints.
+- **`--json`:** includes a `schema_version`, gRPC-specific `error_kinds`, the
+  per-method `unary` results, the `stream` result, and the optional `rpc_slot` /
+  `slot_difference`. It **never** contains the `x-token`.
+
+The Yellowstone `x-token` is read only from the environment (`--x-token-env`) and
+is never printed, serialized, written to a report, or logged.
 
 ## Why URLs are redacted and long hashes are hidden by default
 

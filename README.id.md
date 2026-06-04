@@ -16,7 +16,7 @@
 [![CI](https://github.com/satyakwok/solana-infra-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/satyakwok/solana-infra-doctor/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/satyakwok/solana-infra-doctor/branch/main/graph/badge.svg)](https://codecov.io/gh/satyakwok/solana-infra-doctor)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#lisensi)
-[![Rust](https://img.shields.io/badge/rust-1.76%2B-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org/)
 [![Status](https://img.shields.io/badge/status-active-blue.svg)](#perintah)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/satyakwok/solana-infra-doctor)
 
@@ -39,10 +39,13 @@ dipercaya untuk bot, wallet, indexer, pipeline CI, dan tinjauan infrastruktur.
   `indexer`, `ci`.
 - Memeriksa kesiapan WebSocket (waktu ke notifikasi pertama `slotSubscribe`)
   lewat `sol-doctor ws`.
+- Memeriksa kesiapan **Yellowstone gRPC** (connect, auth `x-token` opsional,
+  unary probe aman, dan stream slot-only) lewat `sol-doctor grpc check`.
 - Menghasilkan output terminal yang mudah dibaca, JSON, dan laporan Markdown.
 
-Tool ini local-first, ringan dependensi, dan dibangun di atas HTTP JSON-RPC
-mentah via `reqwest`.
+Tool ini local-first dan ringan dependensi: HTTP JSON-RPC via `reqwest`,
+WebSocket via `tokio-tungstenite`, dan Yellowstone gRPC via `tonic` dengan
+definisi resmi `yellowstone-grpc-proto` (tanpa SDK Solana/Agave lengkap).
 
 ## Pratinjau CLI
 
@@ -193,6 +196,12 @@ Periksa kesiapan WebSocket:
 sol-doctor ws --rpc https://api.mainnet-beta.solana.com
 ```
 
+Periksa kesiapan Yellowstone gRPC:
+
+```bash
+sol-doctor grpc check --grpc https://example-yellowstone-endpoint
+```
+
 Output JSON (machine-readable, untuk CI):
 
 ```bash
@@ -215,6 +224,7 @@ untuk contoh output terminal dan laporan Markdown.
 | Mode compare | skor, latency, kesegaran slot, kesegaran block-time, pemeriksaan gagal, endpoint terbaik/terburuk |
 | Keamanan jaringan | menolak perbandingan lintas-jaringan berdasarkan genesis hash |
 | WebSocket | derivasi URL, connect, `slotSubscribe`/`logsSubscribe`, notifikasi pertama, reconnect, unsubscribe, close |
+| Yellowstone gRPC | connect + TLS/HTTP-2, auth `x-token` opsional, unary probe (`Ping`/`GetVersion`/`GetSlot`/`GetBlockHeight`/`GetLatestBlockhash`/`IsBlockhashValid`), first-event stream slot-only, cross-check slot HTTP RPC opsional |
 | Keamanan output | meredaksi kredensial dan kemungkinan API key di terminal, JSON, Markdown, dan error |
 
 ## Profil Workload
@@ -430,6 +440,102 @@ dengan `--subscription` (`slot`, default, atau `logs`):
 ```bash
 sol-doctor ws --rpc https://api.mainnet-beta.solana.com --subscription logs
 ```
+
+### Kesiapan Yellowstone gRPC
+
+Periksa apakah sebuah endpoint Yellowstone gRPC terjangkau, terautentikasi,
+responsif, dan men-stream data slot yang segar:
+
+```bash
+sol-doctor grpc check --grpc https://example-yellowstone-endpoint
+```
+
+Kebanyakan endpoint Yellowstone butuh `x-token`. Berikan lewat **variabel
+lingkungan** — token tidak pernah diterima langsung di command line dan tidak
+pernah dicetak, diserialkan, atau di-log:
+
+```bash
+export YELLOWSTONE_X_TOKEN="token-kamu"
+
+sol-doctor grpc check \
+  --grpc https://example-yellowstone-endpoint \
+  --x-token-env YELLOWSTONE_X_TOKEN
+```
+
+Opsional, cross-check slot terbaru stream gRPC terhadap endpoint HTTP RPC
+(memakai ulang RPC client yang aman-redaksi):
+
+```bash
+sol-doctor grpc check \
+  --grpc https://example-yellowstone-endpoint \
+  --x-token-env YELLOWSTONE_X_TOKEN \
+  --rpc https://api.mainnet-beta.solana.com
+```
+
+`grpc check` memvalidasi & meredaksi URL gRPC, connect (TLS + HTTP/2 untuk
+`https`), melampirkan `x-token` hanya bila diberikan, menjalankan **unary** probe
+aman (`Ping`, `GetVersion`, `GetSlot`, `GetBlockHeight`, `GetLatestBlockhash`,
+`IsBlockhashValid`), lalu membuka stream `Subscribe` **slot-only yang sempit**
+untuk mengukur waktu ke update slot pertama dan slot terbaru yang teramati. Aman
+secara default: tidak pernah mengirim transaksi, tidak mengubah state remote,
+tidak subscribe ke akun/transaksi/blok, dan membatasi setiap koneksi, request,
+dan stream dengan deadline.
+
+Method yang mengembalikan `UNIMPLEMENTED` dianggap kapabilitas opsional (`SKIP`),
+bukan kegagalan, karena sebagian deployment Yellowstone hanya menyediakan stream
+`Subscribe`. Verdict ditentukan oleh transport, autentikasi, dan stream slot;
+pemeriksaan unary yang terdegradasi atau selisih slot besar adalah `WARNING`,
+bukan `BAD`.
+
+Opsi:
+
+| Flag | Tujuan |
+| --- | --- |
+| `--grpc <URL>` | Endpoint Yellowstone gRPC (`http`/`https`). Wajib. |
+| `--x-token-env <ENV>` | Baca `x-token` dari variabel lingkungan ini. |
+| `--rpc <URL>` | Endpoint HTTP RPC opsional untuk cross-check kesegaran slot. |
+| `--timeout-ms <MS>` | Timeout koneksi & per-request (default `10000`). |
+| `--duration <MS>` | Jendela observasi stream slot (default `5000`). |
+| `--json` | JSON machine-readable (termasuk `schema_version`). |
+| `--report <PATH>` | Tulis laporan Markdown. |
+| `--verbose` | Tampilkan detail per-method, cross-check, dan hint remediasi. |
+
+Hasilkan JSON atau tulis laporan Markdown:
+
+```bash
+sol-doctor grpc check --grpc https://example-yellowstone-endpoint --json
+sol-doctor grpc check --grpc https://example-yellowstone-endpoint --report yellowstone-grpc-report.md
+```
+
+Contoh output human (struktur ditampilkan; nilai bervariasi per endpoint dan
+waktu):
+
+```text
+Solana Infra Doctor · Yellowstone gRPC Readiness
+
+Target
+Endpoint     example-yellowstone-endpoint
+
+Result
+GOOD         Yellowstone gRPC endpoint is ready
+Connect      42 ms
+Unary        6 passed · 0 failed
+Stream       first slot update in 318 ms
+Latest slot  424,000,123
+
+Checks
+Category         Status    Summary
+Transport        PASS      Connected over TLS (HTTP/2)
+Authentication   PASS      Token accepted
+Unary            PASS      6 / 6 supported checks passed
+Stream           PASS      first slot update in 318 ms
+Freshness        PASS      Slot stream is active
+
+Tip: run with --verbose to see full details.
+```
+
+Kode exit mengikuti pemetaan yang sama dengan command lain (lihat
+[Kode Exit](#kode-exit)): `0` GOOD, `1` WARNING, `2` BAD, `3` UNKNOWN/error.
 
 ### Output berwarna
 
@@ -702,19 +808,29 @@ reproducible.
 
 - `check` dan `compare` memakai HTTP JSON-RPC; `sol-doctor ws` mencakup kesiapan
   subscription slot dan logs (belum ada subscription account/program).
+- `grpc check` adalah pemeriksaan kesiapan satu endpoint yang subscribe **hanya**
+  ke slot; perbandingan endpoint gRPC dan diagnostik subscription lain belum
+  termasuk. Ini diagnostik point-in-time, bukan benchmark atau SLA.
 - Skor adalah heuristik deterministik, bukan jaminan provider.
 - Ini CLI local-first, bukan layanan monitoring terhosting.
 - Kesiapan token memastikan akun program SPL Token dan Token-2022 disajikan;
   simulasi transaksi dan pemeriksaan account indexing belum tercakup.
-- Belum ada dependensi Solana SDK yang dipakai.
+- Tidak ada SDK Solana atau Agave lengkap yang dipakai; satu-satunya crate Solana
+  yang ikut adalah `solana-pubkey` yang ringan (transitif, via definisi proto gRPC).
 - Tidak ada exporter Prometheus, dashboard, layanan cloud terhosting,
   marketplace, token, NFT, points, airdrop, atau fitur governance.
 
 ## Keamanan dan Privasi
 
-Solana Infra Doctor meredaksi kredensial dan kemungkinan API key dari URL RPC yang
-ditampilkan, pesan error, output JSON, dan laporan Markdown. Hindari membagikan
-URL RPC privat mentah.
+Solana Infra Doctor meredaksi kredensial dan kemungkinan API key dari URL RPC dan
+gRPC yang ditampilkan, pesan error, output JSON, dan laporan Markdown. Hindari
+membagikan URL RPC privat mentah.
+
+`x-token` Yellowstone gRPC dibaca **hanya** dari variabel lingkungan yang disebut
+oleh `--x-token-env` (tidak pernah dari argumen command line) dan tidak pernah
+dicetak, diserialkan ke JSON, ditulis ke laporan, atau di-log. Variabel token
+yang kosong/tidak diset dilaporkan sebagai error konfigurasi lokal sebelum koneksi
+dicoba.
 
 ## Use Case Praktis
 
@@ -749,10 +865,13 @@ secara lokal supaya artefak laporan tidak ikut di-commit.
 
 ## Roadmap
 
-Berlandaskan kegunaan, bukan jumlah fitur.
+Berlandaskan kegunaan, bukan jumlah fitur. Lihat
+[`docs/roadmap.md`](docs/roadmap.md) untuk daftar milestone lengkap dan batas
+ruang lingkup.
 
 **Baru saja dirilis**
 
+- **Pemeriksaan kesiapan Yellowstone gRPC** (`grpc check`).
 - Mode sampling berulang (`--samples`) dengan persentil latency p50/p95.
 - Pemeriksaan kesiapan SPL Token dan Token-2022.
 - Wrapper GitHub Action dan binary prebuilt (`cargo binstall`) untuk CI dan
@@ -760,9 +879,9 @@ Berlandaskan kegunaan, bukan jumlah fitur.
 
 **Jangka dekat**
 
-- Sinyal error-rate jendela pendek saat sampling berulang.
-- Laporan Markdown untuk `check` (saat ini hanya `compare` yang menghasilkannya)
-  dan template laporan yang lebih kaya.
+- Perbandingan endpoint Yellowstone gRPC (rank beberapa endpoint gRPC).
+- Laporan Markdown untuk `check` (saat ini hanya `compare` dan `grpc check` yang
+  menghasilkannya) dan template laporan yang lebih kaya.
 - Lebih banyak contoh laporan dan dokumentasi terlokalisasi.
 
 **Nanti**

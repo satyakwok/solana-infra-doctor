@@ -2,8 +2,8 @@
 name = "solana-infra-doctor"
 version = "0.10.0"
 edition = "2021"
-rust-version = "1.85"
-description = "A Rust CLI for Solana RPC production-readiness diagnostics, comparison, and WebSocket checks."
+rust-version = "1.88"
+description = "A Rust CLI for Solana RPC and Yellowstone gRPC production-readiness diagnostics, comparison, and WebSocket checks."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/satyakwok/solana-infra-doctor"
 readme = "README.md"
@@ -35,14 +35,22 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 reliakit-backoff = "0.1.0"
 reliakit-ratelimit = "0.1.0"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+prost = "0.14"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
 tokio = { version = "1.37", features = ["macros", "rt-multi-thread", "time", "net"] }
+tonic = { version = "0.14", default-features = false, features = ["channel", "codegen", "server", "transport", "tls-ring", "tls-webpki-roots"] }
+yellowstone-grpc-proto = { version = "12.4", default-features = false, features = ["tonic"] }
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2.5"
+
+[dev-dependencies]
+# Wraps a bound TcpListener as a connection stream so the integration tests can
+# run an in-process mock Yellowstone gRPC server on an ephemeral port.
+tokio-stream = { version = "0.1", features = ["net"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage)"] }

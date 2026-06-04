@@ -45,4 +45,14 @@ pub enum AppError {
         #[source]
         source: std::io::Error,
     },
+
+    /// `--x-token-env` named an environment variable that is unset or empty. The
+    /// message names the variable only; the token value is never read into it.
+    #[error("x-token environment variable '{var}' is not set or is empty")]
+    MissingTokenEnv { var: String },
+
+    /// The resolved x-token is not valid gRPC metadata (must be ASCII). The
+    /// value itself is never included in the message.
+    #[error("x-token value is not valid gRPC metadata (must be ASCII)")]
+    InvalidTokenValue,
 }

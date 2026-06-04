@@ -38,6 +38,57 @@ pub enum Commands {
 
     /// Diagnose Solana WebSocket readiness for realtime workloads.
     Ws(WsArgs),
+
+    /// Yellowstone gRPC diagnostics (use `grpc check`).
+    Grpc(GrpcArgs),
+}
+
+/// Arguments for the `grpc` command group.
+#[derive(Debug, Args)]
+pub struct GrpcArgs {
+    /// The gRPC subcommand to run.
+    #[command(subcommand)]
+    pub command: GrpcCommand,
+}
+
+/// The `grpc` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum GrpcCommand {
+    /// Check whether a Yellowstone gRPC endpoint is ready for a backend workload.
+    Check(GrpcCheckArgs),
+}
+
+/// Arguments for `grpc check`.
+#[derive(Debug, Args, Clone)]
+pub struct GrpcCheckArgs {
+    /// Yellowstone gRPC endpoint URL (http or https).
+    #[arg(long)]
+    pub grpc: String,
+
+    /// Read the `x-token` from this environment variable. The token is never
+    /// accepted directly on the command line and is never printed.
+    #[arg(long)]
+    pub x_token_env: Option<String>,
+
+    /// Optional HTTP RPC endpoint for a slot-freshness cross-check.
+    #[arg(long)]
+    pub rpc: Option<String>,
+
+    /// Emit machine-readable JSON.
+    #[arg(long)]
+    pub json: bool,
+
+    /// Write a Markdown report to this path.
+    #[arg(long)]
+    pub report: Option<PathBuf>,
+
+    /// Connection and per-request timeout in milliseconds.
+    #[arg(long, default_value_t = 10_000)]
+    pub timeout_ms: u64,
+
+    /// Bounded slot-stream observation window, in milliseconds.
+    #[arg(long = "duration", default_value_t = 5_000)]
+    pub duration_ms: u64,
 }
 
 /// Arguments for the `ws` subcommand.

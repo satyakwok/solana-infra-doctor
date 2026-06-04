@@ -16,7 +16,7 @@
 [![CI](https://github.com/satyakwok/solana-infra-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/satyakwok/solana-infra-doctor/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/satyakwok/solana-infra-doctor/branch/main/graph/badge.svg)](https://codecov.io/gh/satyakwok/solana-infra-doctor)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
-[![Rust](https://img.shields.io/badge/rust-1.76%2B-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org/)
 [![Status](https://img.shields.io/badge/status-active-blue.svg)](#commands)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/satyakwok/solana-infra-doctor)
 
@@ -39,10 +39,13 @@ pipelines, and infrastructure reviews.
   `ci`.
 - Checks WebSocket readiness (`slotSubscribe` time-to-first-event) with
   `sol-doctor ws`.
+- Checks **Yellowstone gRPC** readiness (connect, optional `x-token` auth, safe
+  unary probes, and a slot-only stream) with `sol-doctor grpc check`.
 - Emits human-readable terminal output, JSON, and Markdown reports.
 
-It is local-first, dependency-light, and built on raw HTTP JSON-RPC via
-`reqwest`.
+It is local-first and dependency-light: HTTP JSON-RPC via `reqwest`, WebSocket
+via `tokio-tungstenite`, and Yellowstone gRPC via `tonic` with the official
+`yellowstone-grpc-proto` definitions (no full Solana/Agave SDK).
 
 ## CLI Preview
 
@@ -191,6 +194,12 @@ Check WebSocket readiness:
 sol-doctor ws --rpc https://api.mainnet-beta.solana.com
 ```
 
+Check Yellowstone gRPC readiness:
+
+```bash
+sol-doctor grpc check --grpc https://example-yellowstone-endpoint
+```
+
 JSON output (machine-readable, for CI):
 
 ```bash
@@ -213,7 +222,8 @@ sample terminal output and Markdown reports.
 | Compare mode | score, latency, slot freshness, block-time freshness, failed checks, best/worst endpoint |
 | Network safety | rejects mixed-network comparisons by genesis hash |
 | WebSocket | URL derivation, connect, `slotSubscribe`/`logsSubscribe`, first notification, reconnect, unsubscribe, close |
-| Output safety | redacts credentials and likely API keys in terminal, JSON, Markdown, and errors |
+| Yellowstone gRPC | connect + TLS/HTTP-2, optional `x-token` auth, unary probes (`Ping`/`GetVersion`/`GetSlot`/`GetBlockHeight`/`GetLatestBlockhash`/`IsBlockhashValid`), slot-only stream first-event, optional HTTP RPC slot cross-check |
+| Output safety | redacts credentials and likely API keys (and never prints the gRPC `x-token`) in terminal, JSON, Markdown, and errors |
 
 ## Workload Profiles
 
@@ -425,6 +435,101 @@ with `--subscription` (`slot`, the default, or `logs`):
 ```bash
 sol-doctor ws --rpc https://api.mainnet-beta.solana.com --subscription logs
 ```
+
+### Yellowstone gRPC readiness
+
+Check whether a Yellowstone gRPC endpoint is reachable, authenticated,
+responsive, and streaming fresh slot data:
+
+```bash
+sol-doctor grpc check --grpc https://example-yellowstone-endpoint
+```
+
+Most Yellowstone endpoints require an `x-token`. Provide it via an **environment
+variable** — the token is never accepted directly on the command line and is
+never printed, serialized, or logged:
+
+```bash
+export YELLOWSTONE_X_TOKEN="your-token"
+
+sol-doctor grpc check \
+  --grpc https://example-yellowstone-endpoint \
+  --x-token-env YELLOWSTONE_X_TOKEN
+```
+
+Optionally cross-check the gRPC stream's latest slot against an HTTP RPC endpoint
+(reusing the same redaction-safe RPC client):
+
+```bash
+sol-doctor grpc check \
+  --grpc https://example-yellowstone-endpoint \
+  --x-token-env YELLOWSTONE_X_TOKEN \
+  --rpc https://api.mainnet-beta.solana.com
+```
+
+`grpc check` validates and redacts the gRPC URL, connects (TLS + HTTP/2 for
+`https`), attaches the `x-token` only when supplied, runs safe **unary** probes
+(`Ping`, `GetVersion`, `GetSlot`, `GetBlockHeight`, `GetLatestBlockhash`,
+`IsBlockhashValid`), and opens a **narrow slot-only** `Subscribe` stream to
+measure time-to-first-slot-update and the latest observed slot. It is safe by
+default: it never sends transactions, never modifies remote state, never
+subscribes to accounts/transactions/blocks, and bounds every connection,
+request, and stream with a deadline.
+
+A method that returns `UNIMPLEMENTED` is treated as an optional capability
+(`SKIP`), not a failure, because some Yellowstone deployments expose only the
+`Subscribe` stream. The verdict is driven by transport, authentication, and the
+slot stream; a degraded unary check or a large slot gap is a `WARNING`, not
+`BAD`.
+
+Options:
+
+| Flag | Purpose |
+| --- | --- |
+| `--grpc <URL>` | Yellowstone gRPC endpoint (`http`/`https`). Required. |
+| `--x-token-env <ENV>` | Read the `x-token` from this environment variable. |
+| `--rpc <URL>` | Optional HTTP RPC endpoint for a slot-freshness cross-check. |
+| `--timeout-ms <MS>` | Connection and per-request timeout (default `10000`). |
+| `--duration <MS>` | Bounded slot-stream observation window (default `5000`). |
+| `--json` | Machine-readable JSON (includes `schema_version`). |
+| `--report <PATH>` | Write a Markdown report. |
+| `--verbose` | Show per-method detail, the cross-check, and remediation hints. |
+
+Emit JSON or write a Markdown report:
+
+```bash
+sol-doctor grpc check --grpc https://example-yellowstone-endpoint --json
+sol-doctor grpc check --grpc https://example-yellowstone-endpoint --report yellowstone-grpc-report.md
+```
+
+Example human output (structure shown; values vary by endpoint and moment):
+
+```text
+Solana Infra Doctor · Yellowstone gRPC Readiness
+
+Target
+Endpoint     example-yellowstone-endpoint
+
+Result
+GOOD         Yellowstone gRPC endpoint is ready
+Connect      42 ms
+Unary        6 passed · 0 failed
+Stream       first slot update in 318 ms
+Latest slot  424,000,123
+
+Checks
+Category         Status    Summary
+Transport        PASS      Connected over TLS (HTTP/2)
+Authentication   PASS      Token accepted
+Unary            PASS      6 / 6 supported checks passed
+Stream           PASS      first slot update in 318 ms
+Freshness        PASS      Slot stream is active
+
+Tip: run with --verbose to see full details.
+```
+
+Exit codes follow the same mapping as the other commands (see
+[Exit Codes](#exit-codes)): `0` GOOD, `1` WARNING, `2` BAD, `3` UNKNOWN/error.
 
 ### Color output
 
@@ -694,19 +799,29 @@ specific release tag (e.g. `@v0.9.0`) for fully reproducible runs.
 
 - `check` and `compare` use HTTP JSON-RPC; `sol-doctor ws` covers slot and logs
   subscription readiness (no account/program subscriptions yet).
+- `grpc check` is a single-endpoint readiness check that subscribes **only** to
+  slots; gRPC endpoint comparison and broader subscription diagnostics are not
+  included yet. It is a point-in-time diagnostic, not a benchmark or SLA.
 - Scores are deterministic heuristics, not provider guarantees.
 - This is a local-first CLI, not a hosted monitoring service.
 - Token readiness confirms the SPL Token and Token-2022 program accounts are
   served; transaction simulation and account indexing checks are not covered yet.
-- No Solana SDK dependencies are used yet.
+- No full Solana or Agave SDK is used; the only Solana crate pulled in is the
+  lightweight `solana-pubkey` (transitively, via the gRPC proto definitions).
 - No Prometheus exporter, dashboard, hosted cloud service, marketplace, token,
   NFT, points, airdrop, or governance features.
 
 ## Security and Privacy
 
 Solana Infra Doctor redacts credentials and likely API keys from displayed RPC
-URLs, error messages, JSON output, and Markdown reports. Avoid sharing raw
-private RPC URLs.
+and gRPC URLs, error messages, JSON output, and Markdown reports. Avoid sharing
+raw private RPC URLs.
+
+The Yellowstone gRPC `x-token` is read **only** from the environment variable
+named by `--x-token-env` (never from a command-line argument) and is never
+printed, serialized into JSON, written to a report, or logged. A missing or
+empty token variable is reported as a local configuration error before any
+connection is attempted.
 
 ## Practical Use Cases
 
@@ -743,8 +858,12 @@ report artifact is not committed.
 
 Grounded in usefulness, not feature count.
 
+See [`docs/roadmap.md`](docs/roadmap.md) for the full milestone list and scope
+boundaries.
+
 **Recently shipped**
 
+- **Yellowstone gRPC readiness check** (`grpc check`).
 - Repeat sampling mode (`--samples`) with p50/p95 latency percentiles.
 - SPL Token and Token-2022 readiness checks.
 - A GitHub Action wrapper and prebuilt binaries (`cargo binstall`) for CI and
@@ -752,9 +871,9 @@ Grounded in usefulness, not feature count.
 
 **Near-term**
 
-- Short-window error-rate signals during repeat sampling.
-- A Markdown report for `check` (today only `compare` emits one) and richer
-  report templates.
+- Yellowstone gRPC endpoint comparison (rank multiple gRPC endpoints).
+- A Markdown report for `check` (today only `compare` and `grpc check` emit one)
+  and richer report templates.
 - More example reports and localized docs.
 
 **Later**

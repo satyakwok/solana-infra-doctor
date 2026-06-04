@@ -3,9 +3,9 @@
 use clap::Parser;
 use solana_infra_doctor::{
     checks,
-    cli::{Cli, Commands},
+    cli::{Cli, Commands, GrpcCommand},
     color::Palette,
-    compare, report, ws,
+    compare, grpc, report, ws,
 };
 use std::io::IsTerminal;
 use tracing_subscriber::EnvFilter;
@@ -76,6 +76,22 @@ async fn run() -> anyhow::Result<i32> {
             }
             Ok(result.verdict.exit_code())
         }
+        Commands::Grpc(args) => match args.command {
+            GrpcCommand::Check(check_args) => {
+                let json = check_args.json;
+                let markdown_report = check_args.report.clone();
+                let result = grpc::run_grpc_check(check_args).await?;
+                if let Some(path) = markdown_report {
+                    grpc::write_markdown_report(&result, &path)?;
+                }
+                if json {
+                    println!("{}", grpc::render_json(&result)?);
+                } else {
+                    print!("{}", grpc::render_human(&result, palette, verbose));
+                }
+                Ok(result.verdict.exit_code())
+            }
+        },
     }
 }
 

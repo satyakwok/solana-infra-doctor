@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+- Add **`sol-doctor grpc check`**: Yellowstone gRPC readiness diagnostics for
+  backend workloads. The command validates and redacts the gRPC URL, connects
+  (TLS + HTTP/2 for `https`), optionally authenticates with an `x-token` read
+  **only** from an environment variable (`--x-token-env`), runs safe unary
+  probes (`Ping`, `GetVersion`, `GetSlot`, `GetBlockHeight`, `GetLatestBlockhash`,
+  `IsBlockhashValid`), and opens a narrow **slot-only** `Subscribe` stream to
+  measure time-to-first-slot-update and the latest observed slot. An optional
+  `--rpc` cross-check compares the gRPC slot against an HTTP RPC slot. Output is
+  available as concise/`--verbose` human text, `--json` (with a `schema_version`),
+  and a `--report <PATH>` Markdown report. A new gRPC error-kind taxonomy
+  (`invalid_grpc_url`, `tls_error`, `unauthenticated`, `unimplemented`,
+  `no_first_event`, `stream_closed`, …) and per-failure remediation hints are
+  included.
+- **Safety:** the command is safe by default — it never sends transactions or
+  modifies remote state, never subscribes to accounts/transactions/blocks (only
+  slots), bounds every connection/request/stream with a deadline, and never
+  prints, serializes, or logs the token.
+- **Dependencies:** adds `tonic` 0.14 and `yellowstone-grpc-proto` 12.4 (which
+  pulls only `solana-pubkey`, not the full Solana/Agave SDK; HTTP/2 stack is
+  shared with the existing `reqwest` dependency). Raises the MSRV to **1.88**
+  (required by `tonic` 0.14). The supported release-target matrix (Linux gnu +
+  musl, macOS Intel + Apple Silicon, Windows) is unchanged; no system `protoc`
+  is required (a vendored `protoc` is used at build time).
+- Existing commands (`check`, `compare`, `ws`) are unchanged.
+
 ## 0.10.0 - 2026-06-04
 
 - Attach **prebuilt `sol-doctor` binaries** to each GitHub Release and add

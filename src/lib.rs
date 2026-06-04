@@ -13,6 +13,8 @@
 //! - [`checks`] — single-endpoint HTTP JSON-RPC diagnostics and verdicts.
 //! - [`compare`] — multi-endpoint comparison, scoring, and report rendering.
 //! - [`ws`] — WebSocket (`slotSubscribe`) readiness diagnostics.
+//! - [`grpc`] — Yellowstone gRPC readiness diagnostics (connect, optional
+//!   `x-token` auth, unary probes, and a slot-only `Subscribe` stream).
 //! - [`rpc`] — the JSON-RPC client, endpoint parsing, and wire models.
 //! - [`redact`] — credential/API-key redaction for safe output.
 //! - [`report`], [`latency`], [`verdict`], [`error`] — output and shared models.
@@ -47,6 +49,7 @@ pub mod cli;
 pub mod color;
 pub mod compare;
 pub mod error;
+pub mod grpc;
 pub mod latency;
 pub mod output;
 pub mod redact;
@@ -58,5 +61,6 @@ pub mod ws;
 // Curated top-level entrypoints for embedding the engine in another frontend.
 pub use checks::run_check;
 pub use compare::run_compare;
+pub use grpc::run_grpc_check;
 pub use redact::{redact_text, redact_url};
 pub use ws::run_ws;

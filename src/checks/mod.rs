@@ -760,7 +760,9 @@ fn classify_error(error: &AppError) -> ErrorKind {
         | AppError::HttpClient(_)
         | AppError::SerializeReport(_)
         | AppError::CompareRequiresTwoRpcUrls
-        | AppError::WriteMarkdownReport { .. } => ErrorKind::UnknownError,
+        | AppError::WriteMarkdownReport { .. }
+        | AppError::MissingTokenEnv { .. }
+        | AppError::InvalidTokenValue => ErrorKind::UnknownError,
     }
 }
 
