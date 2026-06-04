@@ -2036,3 +2036,52 @@ async fn check_without_samples_has_no_latency_samples() {
     assert!(report.latency_samples.is_none());
     assert!(!render_human(&report, plain(), false).contains("Samples"));
 }
+
+#[tokio::test]
+async fn rpc_retries_transient_429_then_succeeds() {
+    // The first getHealth gets a 429 (transient) and is retried; the retry and
+    // every other check succeed.
+    let mut responses = vec![MockResponse::status(
+        "429 Too Many Requests",
+        "rate limited",
+    )];
+    responses.extend(healthy_rpc_responses(347_000_000));
+    let server = MockRpcServer::start(responses);
+
+    let report = run_check(args_for(server.url.clone())).await.unwrap();
+    server.join();
+
+    assert_eq!(report.verdict, Verdict::Good);
+    assert!(report
+        .checks
+        .iter()
+        .all(|check| check.status == CheckStatus::Success));
+}
+
+#[tokio::test]
+async fn resilience_backoff_and_rate_limit() {
+    use solana_infra_doctor::rpc::resilience::Resilience;
+
+    let _ = Resilience::new(); // exercise new()
+    let resilience = Resilience::default(); // and Default
+                                            // Two retries are available (0 and 1), then the policy gives up.
+    assert!(resilience.retry_delay(0).is_some());
+    assert!(resilience.retry_delay(1).is_some());
+    assert!(resilience.retry_delay(2).is_none());
+
+    // A burst of 20 tokens is instant; further acquires must wait for refill.
+    let start = std::time::Instant::now();
+    for _ in 0..24 {
+        resilience.acquire().await;
+    }
+    assert!(start.elapsed() >= std::time::Duration::from_millis(40));
+}
+
+#[test]
+fn rpc_endpoint_debug_redacts_credentials() {
+    let endpoint = RpcEndpoint::parse("https://user:pass@example.com/rpc?api-key=secret").unwrap();
+    let debug = format!("{endpoint:?}");
+    assert!(!debug.contains("user:pass"));
+    assert!(!debug.contains("secret"));
+    assert!(debug.contains("***:***@example.com"));
+}
