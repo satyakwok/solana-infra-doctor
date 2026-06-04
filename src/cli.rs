@@ -75,6 +75,11 @@ pub struct CheckArgs {
     #[arg(long)]
     pub fail_on_warning: bool,
 
+    /// Probe latency this many times and report p50/p95 percentiles. The default
+    /// of 1 is a single sample; higher values reveal tail latency.
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=1000))]
+    pub samples: u32,
+
     /// Per-request timeout in milliseconds.
     #[arg(long, default_value_t = 5_000)]
     pub timeout_ms: u64,

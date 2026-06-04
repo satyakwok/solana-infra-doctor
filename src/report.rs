@@ -62,23 +62,44 @@ pub fn render_human(report: &CheckReport, palette: Palette, verbose: bool) -> St
         .filter(|check| check.status == CheckStatus::Success)
         .count();
     let failed = report.checks.len() - passed;
-    output.push_str(&table::render(
-        &[
-            vec![
-                Cell::styled(report.verdict.to_string(), palette.verdict(report.verdict)),
-                Cell::plain(report.summary.clone()),
-            ],
-            vec![
-                Cell::styled("Latency", palette.label("Latency")),
-                Cell::plain(average),
-            ],
-            vec![
-                Cell::styled("Checks", palette.label("Checks")),
-                Cell::plain(format!("{passed} passed · {failed} failed")),
-            ],
+    let mut result_rows = vec![
+        vec![
+            Cell::styled(report.verdict.to_string(), palette.verdict(report.verdict)),
+            Cell::plain(report.summary.clone()),
         ],
-        3,
-    ));
+        vec![
+            Cell::styled("Latency", palette.label("Latency")),
+            Cell::plain(average),
+        ],
+        vec![
+            Cell::styled("Checks", palette.label("Checks")),
+            Cell::plain(format!("{passed} passed · {failed} failed")),
+        ],
+    ];
+    if let Some(stats) = &report.latency_samples {
+        let detail = if verbose {
+            format!(
+                "p50 {} · p95 {} · min {} · max {} ({} runs)",
+                style::millis(stats.p50_ms),
+                style::millis(stats.p95_ms),
+                style::millis(stats.min_ms),
+                style::millis(stats.max_ms),
+                stats.count
+            )
+        } else {
+            format!(
+                "p50 {} · p95 {} ({} runs)",
+                style::millis(stats.p50_ms),
+                style::millis(stats.p95_ms),
+                stats.count
+            )
+        };
+        result_rows.push(vec![
+            Cell::styled("Samples", palette.label("Samples")),
+            Cell::plain(detail),
+        ]);
+    }
+    output.push_str(&table::render(&result_rows, 3));
     output.push('\n');
 
     if verbose {
@@ -219,6 +240,7 @@ mod tests {
             rpc_url: "https://api.mainnet-beta.solana.com/".to_string(),
             summary: "all RPC readiness checks succeeded".to_string(),
             average_latency_ms: Some(100),
+            latency_samples: None,
             fail_on_warning: true,
             checks: vec![
                 RpcCheck {

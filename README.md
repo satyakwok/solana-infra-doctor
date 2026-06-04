@@ -227,6 +227,17 @@ Emit JSON (for automation — prefer this over parsing the human text):
 sol-doctor check --rpc https://api.mainnet-beta.solana.com --json
 ```
 
+Probe latency multiple times and report percentiles (a single sample hides tail
+latency):
+
+```bash
+sol-doctor check --rpc https://api.mainnet-beta.solana.com --samples 20
+```
+
+This adds a `Samples` line (`p50 … · p95 …`) to human output and a
+`latency_samples` object to JSON. The default is a single sample, and `--samples`
+does not change the verdict.
+
 Use a custom per-request timeout:
 
 ```bash
