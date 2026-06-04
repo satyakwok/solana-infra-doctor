@@ -99,6 +99,18 @@ pub fn render_human(report: &CheckReport, palette: Palette, verbose: bool) -> St
             Cell::plain(detail),
         ]);
     }
+    if let Some(lag) = report.block_time_lag_secs {
+        result_rows.push(vec![
+            Cell::styled("Block time", palette.label("Block time")),
+            Cell::plain(format!("{lag}s behind (finalized)")),
+        ]);
+    }
+    if let Some(fee) = report.prioritization_fee_median {
+        result_rows.push(vec![
+            Cell::styled("Fee market", palette.label("Fee market")),
+            Cell::plain(format!("median {fee} micro-lamports/CU")),
+        ]);
+    }
     output.push_str(&table::render(&result_rows, 3));
     output.push('\n');
 
@@ -241,6 +253,8 @@ mod tests {
             summary: "all RPC readiness checks succeeded".to_string(),
             average_latency_ms: Some(100),
             latency_samples: None,
+            block_time_lag_secs: None,
+            prioritization_fee_median: None,
             fail_on_warning: true,
             checks: vec![
                 RpcCheck {

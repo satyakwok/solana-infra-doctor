@@ -110,6 +110,16 @@ fn render_endpoints_verbose(report: &CompareReport, palette: Palette, output: &m
             ),
             detail_row(
                 palette,
+                "Block time lag",
+                format_block_time_lag(endpoint.block_time_lag_secs),
+            ),
+            detail_row(
+                palette,
+                "Median priority fee",
+                format_priority_fee(endpoint.prioritization_fee_median),
+            ),
+            detail_row(
+                palette,
                 "Failed checks",
                 format_failed_checks(&endpoint.failed_checks),
             ),
@@ -185,6 +195,17 @@ fn format_latency_spaced(latency: Option<u128>) -> String {
     latency.map_or_else(|| "n/a".to_string(), style::millis)
 }
 
+fn format_block_time_lag(lag: Option<i64>) -> String {
+    lag.map_or_else(|| "n/a".to_string(), |lag| format!("{lag}s behind"))
+}
+
+fn format_priority_fee(fee: Option<u64>) -> String {
+    fee.map_or_else(
+        || "n/a".to_string(),
+        |fee| format!("{fee} micro-lamports/CU"),
+    )
+}
+
 /// Serialize a compare report to pretty-printed JSON.
 pub fn render_json(report: &CompareReport) -> Result<String, AppError> {
     serde_json::to_string_pretty(report).map_err(AppError::SerializeReport)
@@ -250,6 +271,14 @@ pub fn render_markdown(report: &CompareReport) -> String {
         output.push_str(&format!(
             "- Average latency: {}\n",
             format_latency(endpoint.average_latency_ms)
+        ));
+        output.push_str(&format!(
+            "- Block time lag: {}\n",
+            format_block_time_lag(endpoint.block_time_lag_secs)
+        ));
+        output.push_str(&format!(
+            "- Median priority fee: {}\n",
+            format_priority_fee(endpoint.prioritization_fee_median)
         ));
         output.push_str(&format!(
             "- Failed checks: {}\n",

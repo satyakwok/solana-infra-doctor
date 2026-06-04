@@ -95,6 +95,12 @@ pub struct CompareEndpoint {
     pub slot_lag: Option<u64>,
     /// Mean per-check latency in milliseconds.
     pub average_latency_ms: Option<u128>,
+    /// Seconds the finalized block time lags wall clock — a freshness signal
+    /// (lower is fresher). Used in scoring; `None` when unavailable.
+    pub block_time_lag_secs: Option<i64>,
+    /// Median recent prioritization fee (micro-lamports/CU). Chain-wide
+    /// fee-market context — surfaced, but not a scoring discriminator.
+    pub prioritization_fee_median: Option<u64>,
     /// Names of the checks that failed.
     pub failed_checks: Vec<String>,
     /// Whether the latest blockhash validated.
@@ -242,6 +248,8 @@ fn build_endpoint(
         slot,
         slot_lag,
         average_latency_ms: report.average_latency_ms,
+        block_time_lag_secs: report.block_time_lag_secs,
+        prioritization_fee_median: report.prioritization_fee_median,
         failed_checks,
         blockhash_valid,
         notes: Vec::new(),

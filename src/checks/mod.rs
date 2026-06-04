@@ -7,7 +7,7 @@ use crate::{
     latency::{average_latency_ms, Latency, LatencyStats},
     rpc::{
         BlockhashValidResponse, JsonRpcRequest, JsonRpcResponse, LatestBlockhashResponse,
-        PerformanceSample, RpcClient, RpcEndpoint, VersionInfo,
+        PerformanceSample, PrioritizationFee, RpcClient, RpcEndpoint, VersionInfo,
     },
     verdict::Verdict,
 };
@@ -33,6 +33,13 @@ pub struct CheckReport {
     pub average_latency_ms: Option<u128>,
     /// Percentile latency summary from repeat sampling (`--samples`), if requested.
     pub latency_samples: Option<LatencyStats>,
+    /// Seconds the finalized chain tip's block time lags wall-clock time — a
+    /// freshness signal (lower is fresher). `None` if `getBlockTime` failed.
+    pub block_time_lag_secs: Option<i64>,
+    /// Median recent prioritization fee (micro-lamports/CU). Chain-wide context,
+    /// not an endpoint-quality signal. `None` if `getRecentPrioritizationFees`
+    /// failed.
+    pub prioritization_fee_median: Option<u64>,
     /// Whether `--fail-on-warning` was set (surfaced for CI context).
     pub fail_on_warning: bool,
     /// The individual per-method check results.
@@ -167,6 +174,8 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
                 summary: format!("invalid RPC URL: {reason}"),
                 average_latency_ms: None,
                 latency_samples: None,
+                block_time_lag_secs: None,
+                prioritization_fee_median: None,
                 fail_on_warning: args.fail_on_warning,
                 checks: vec![RpcCheck::failed(
                     CheckCategory::Core,
@@ -198,6 +207,11 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
     checks.push(check_blockhash_valid(&client, blockhash.as_deref()).await);
     checks.push(check_performance_samples(&client).await);
 
+    let (block_time_check, block_time_lag_secs) = check_block_time(&client).await;
+    checks.push(block_time_check);
+    let (fee_check, prioritization_fee_median) = check_prioritization_fees(&client).await;
+    checks.push(fee_check);
+
     let average_latency_ms = average_latency_ms(
         checks
             .iter()
@@ -221,6 +235,8 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
         summary,
         average_latency_ms,
         latency_samples,
+        block_time_lag_secs,
+        prioritization_fee_median,
         fail_on_warning: args.fail_on_warning,
         checks,
     })
@@ -434,6 +450,125 @@ async fn check_performance_samples(client: &RpcClient) -> RpcCheck {
     }
 }
 
+/// Current wall-clock time as a Unix timestamp (seconds).
+fn unix_now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
+}
+
+/// `getBlockTime` on the latest **finalized** slot, yielding how far the
+/// finalized chain tip's block time lags wall-clock time (a freshness signal).
+///
+/// We use `getBlockTime` rather than `getBlock`: on public RPC, `getBlock`
+/// frequently returns "Block not available" for recent slots, whereas
+/// `getBlockTime` is reliable for finalized slots and returns exactly the
+/// timestamp we need.
+async fn check_block_time(client: &RpcClient) -> (RpcCheck, Option<i64>) {
+    const METHOD: &str = "getBlockTime";
+    let slot = match call_rpc::<u64>(
+        client,
+        8,
+        "getSlot",
+        vec![serde_json::json!({"commitment": "finalized"})],
+    )
+    .await
+    {
+        Ok((response, latency)) => match response.result {
+            Some(slot) => slot,
+            None => {
+                return (
+                    failed_from_response(
+                        CheckCategory::Performance,
+                        METHOD,
+                        Some(latency),
+                        &response,
+                    ),
+                    None,
+                )
+            }
+        },
+        Err(error) => {
+            return (
+                failed_from_error(CheckCategory::Performance, METHOD, error),
+                None,
+            )
+        }
+    };
+
+    match call_rpc::<i64>(client, 9, METHOD, vec![serde_json::json!(slot)]).await {
+        Ok((response, latency)) => match response.result {
+            Some(block_time) => {
+                let lag = (unix_now_secs() - block_time).max(0);
+                (
+                    RpcCheck::success(
+                        CheckCategory::Performance,
+                        METHOD,
+                        latency,
+                        format!("finalized block time {lag}s behind wall clock"),
+                    ),
+                    Some(lag),
+                )
+            }
+            None => (
+                failed_from_response(CheckCategory::Performance, METHOD, Some(latency), &response),
+                None,
+            ),
+        },
+        Err(error) => (
+            failed_from_error(CheckCategory::Performance, METHOD, error),
+            None,
+        ),
+    }
+}
+
+/// `getRecentPrioritizationFees`, summarized as the **median** recent
+/// per-compute-unit fee. This is chain-wide fee-market context (it does not
+/// discriminate between endpoints on the same network), so it is surfaced for
+/// information but does not affect the comparison score.
+async fn check_prioritization_fees(client: &RpcClient) -> (RpcCheck, Option<u64>) {
+    const METHOD: &str = "getRecentPrioritizationFees";
+    match call_rpc::<Vec<PrioritizationFee>>(client, 10, METHOD, vec![serde_json::json!([])]).await
+    {
+        Ok((response, latency)) => match response.result {
+            Some(fees) if !fees.is_empty() => {
+                let mut values: Vec<u64> = fees.iter().map(|fee| fee.prioritization_fee).collect();
+                values.sort_unstable();
+                let median = values[values.len() / 2];
+                let max = values[values.len() - 1];
+                (
+                    RpcCheck::success(
+                        CheckCategory::Performance,
+                        METHOD,
+                        latency,
+                        format!("median priority fee {median} micro-lamports/CU (max {max})"),
+                    ),
+                    Some(median),
+                )
+            }
+            Some(_) => (
+                RpcCheck::failed(
+                    CheckCategory::Performance,
+                    METHOD,
+                    Some(latency),
+                    "no recent prioritization fees returned".to_string(),
+                    ErrorKind::MalformedResponse,
+                ),
+                None,
+            ),
+            None => (
+                failed_from_response(CheckCategory::Performance, METHOD, Some(latency), &response),
+                None,
+            ),
+        },
+        Err(error) => (
+            failed_from_error(CheckCategory::Performance, METHOD, error),
+            None,
+        ),
+    }
+}
+
 async fn call_rpc<T>(
     client: &RpcClient,
     id: u64,
@@ -626,6 +761,18 @@ mod tests {
         r#"{"jsonrpc":"2.0","id":7,"result":[{"slot":10,"numSlots":64,"numTransactions":124000,"samplePeriodSecs":60,"numNonVoteTransactions":90000}]}"#
     }
 
+    // The getBlockTime check makes two calls (getSlot finalized, then
+    // getBlockTime); getRecentPrioritizationFees is one.
+    fn finalized_slot_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":8,"result":100}"#
+    }
+    fn block_time_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":9,"result":1700000000}"#
+    }
+    fn fees_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":10,"result":[{"slot":1,"prioritizationFee":0},{"slot":2,"prioritizationFee":150}]}"#
+    }
+
     fn success(category: CheckCategory, method: &'static str, latency_ms: u128) -> RpcCheck {
         RpcCheck {
             category,
@@ -670,6 +817,9 @@ mod tests {
             latest_blockhash_ok(),
             blockhash_valid_ok(),
             performance_ok(),
+            finalized_slot_ok(),
+            block_time_ok(),
+            fees_ok(),
         ]);
 
         let expected_url = format!("{}/", server.url);
@@ -679,7 +829,7 @@ mod tests {
         assert_eq!(report.verdict, Verdict::Good);
         assert_eq!(report.rpc_url, expected_url);
         assert_eq!(report.summary, "All RPC readiness checks passed");
-        assert_eq!(report.checks.len(), 7);
+        assert_eq!(report.checks.len(), 9);
         assert!(report.average_latency_ms.is_some());
         assert!(report
             .checks
@@ -696,6 +846,9 @@ mod tests {
             slot_ok(),
             r#"{"jsonrpc":"2.0","id":5,"result":{"value":{"blockhash":"","lastValidBlockHeight":123456}}}"#,
             performance_ok(),
+            finalized_slot_ok(),
+            block_time_ok(),
+            fees_ok(),
         ]);
 
         let report = run_check(args_for(server.url.clone())).await.unwrap();
@@ -724,6 +877,9 @@ mod tests {
             latest_blockhash_ok(),
             blockhash_valid_ok(),
             performance_ok(),
+            finalized_slot_ok(),
+            block_time_ok(),
+            fees_ok(),
         ]);
 
         let report = run_check(args_for(server.url.clone())).await.unwrap();
@@ -749,6 +905,9 @@ mod tests {
             latest_blockhash_ok(),
             blockhash_valid_ok(),
             performance_ok(),
+            finalized_slot_ok(),
+            block_time_ok(),
+            fees_ok(),
         ]);
 
         let report = run_check(args_for(server.url.clone())).await.unwrap();

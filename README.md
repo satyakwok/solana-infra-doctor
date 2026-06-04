@@ -131,9 +131,10 @@ sample terminal output and Markdown reports.
 | Area | Checks |
 | --- | --- |
 | HTTP JSON-RPC | health, version, genesis hash, slot, blockhash, performance samples |
-| Compare mode | score, latency, slot freshness, failed checks, best/worst endpoint |
+| Freshness & fees | block-time freshness (`getBlockTime`), recent prioritization fees |
+| Compare mode | score, latency, slot freshness, block-time freshness, failed checks, best/worst endpoint |
 | Network safety | rejects mixed-network comparisons by genesis hash |
-| WebSocket | URL derivation, connect, `slotSubscribe`, first slot notification, unsubscribe, close |
+| WebSocket | URL derivation, connect, `slotSubscribe`/`logsSubscribe`, first notification, reconnect, unsubscribe, close |
 | Output safety | redacts credentials and likely API keys in terminal, JSON, Markdown, and errors |
 
 ## Workload Profiles
@@ -175,6 +176,8 @@ automation, or operational runbooks.
 | Blockhash | `getLatestBlockhash` | Confirms the endpoint can produce a recent blockhash. |
 | Blockhash | `isBlockhashValid` | Confirms the latest returned blockhash is valid. |
 | Performance | `getRecentPerformanceSamples` | Confirms recent performance sample data is available. |
+| Performance | `getBlockTime` | Measures how far the latest finalized block time lags wall clock (a freshness signal used in scoring). |
+| Performance | `getRecentPrioritizationFees` | Surfaces the median recent priority fee as fee-market context (chain-wide, not a per-endpoint score signal). |
 
 The CLI measures latency for each method and calculates an average latency
 verdict using these thresholds:

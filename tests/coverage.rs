@@ -182,6 +182,15 @@ fn healthy_rpc_responses(slot: u64) -> Vec<MockResponse> {
         MockResponse::ok(latest_blockhash_ok()),
         MockResponse::ok(blockhash_valid_ok()),
         MockResponse::ok(performance_ok()),
+        // getBlockTime check: getSlot(finalized) then getBlockTime.
+        MockResponse::ok(Box::leak(
+            format!(r#"{{"jsonrpc":"2.0","id":8,"result":{slot}}}"#).into_boxed_str(),
+        )),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":9,"result":1700000000}"#),
+        // getRecentPrioritizationFees.
+        MockResponse::ok(
+            r#"{"jsonrpc":"2.0","id":10,"result":[{"slot":1,"prioritizationFee":0},{"slot":2,"prioritizationFee":150}]}"#,
+        ),
     ]
 }
 
@@ -195,6 +204,11 @@ async fn full_check_returns_good_for_healthy_rpc() {
         MockResponse::ok(latest_blockhash_ok()),
         MockResponse::ok(blockhash_valid_ok()),
         MockResponse::ok(performance_ok()),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":8,"result":100}"#),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":9,"result":1700000000}"#),
+        MockResponse::ok(
+            r#"{"jsonrpc":"2.0","id":10,"result":[{"slot":1,"prioritizationFee":0}]}"#,
+        ),
     ]);
     let expected_url = format!("{}/", server.url);
 
@@ -204,7 +218,7 @@ async fn full_check_returns_good_for_healthy_rpc() {
     assert_eq!(report.verdict, Verdict::Good);
     assert_eq!(report.rpc_url, expected_url);
     assert_eq!(report.summary, "All RPC readiness checks passed");
-    assert_eq!(report.checks.len(), 7);
+    assert_eq!(report.checks.len(), 9);
     assert!(report.average_latency_ms.is_some());
     assert!(report
         .checks
@@ -439,6 +453,8 @@ fn verdict_latency_and_report_helpers_are_covered() {
         summary: "RPC checks succeeded, but average latency is elevated at 600ms".to_string(),
         average_latency_ms: None,
         latency_samples: None,
+        block_time_lag_secs: None,
+        prioritization_fee_median: None,
         fail_on_warning: true,
         checks: vec![success, failed],
     };
@@ -603,6 +619,8 @@ fn compare_check_report(
         summary: verdict.to_string(),
         average_latency_ms,
         latency_samples: None,
+        block_time_lag_secs: None,
+        prioritization_fee_median: None,
         fail_on_warning: false,
         checks,
     }
@@ -723,6 +741,8 @@ fn compare_profiles_apply_expected_adjustments_and_notes() {
         slot: Some(100),
         slot_lag: Some(100),
         average_latency_ms: Some(900),
+        block_time_lag_secs: None,
+        prioritization_fee_median: None,
         failed_checks: vec!["getRecentPerformanceSamples".to_string()],
         blockhash_valid: false,
         notes: Vec::new(),
@@ -1848,6 +1868,8 @@ fn compare_recommendation_falls_back_when_best_index_has_no_endpoint() {
             slot: Some(100),
             slot_lag: Some(0),
             average_latency_ms: Some(20),
+            block_time_lag_secs: None,
+            prioritization_fee_median: None,
             failed_checks: Vec::new(),
             blockhash_valid: true,
             notes: Vec::new(),
@@ -2169,4 +2191,80 @@ fn ws_subscription_methods_for_slot_and_logs() {
         serde_json::from_str(r#"{"params":{"result":{"slot":42}}}"#).unwrap();
     assert_eq!(Subscription::Slot.extract_slot(&with_slot), Some(42));
     assert_eq!(Subscription::Logs.extract_slot(&with_slot), None);
+}
+
+#[tokio::test]
+async fn check_block_time_getslot_null_and_fees_empty() {
+    // getSlot(finalized) returns null (block-time check fails before getBlockTime),
+    // and getRecentPrioritizationFees returns an empty array.
+    let responses = vec![
+        MockResponse::ok(health_ok()),
+        MockResponse::ok(version_ok()),
+        MockResponse::ok(genesis_ok()),
+        MockResponse::ok(slot_ok()),
+        MockResponse::ok(latest_blockhash_ok()),
+        MockResponse::ok(blockhash_valid_ok()),
+        MockResponse::ok(performance_ok()),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":8,"result":null}"#),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":10,"result":[]}"#),
+    ];
+    let server = MockRpcServer::start(responses);
+    let report = run_check(args_for(server.url.clone())).await.unwrap();
+    server.join();
+    assert!(report.block_time_lag_secs.is_none());
+    assert!(report.prioritization_fee_median.is_none());
+}
+
+#[tokio::test]
+async fn check_block_time_null_and_fees_null() {
+    let responses = vec![
+        MockResponse::ok(health_ok()),
+        MockResponse::ok(version_ok()),
+        MockResponse::ok(genesis_ok()),
+        MockResponse::ok(slot_ok()),
+        MockResponse::ok(latest_blockhash_ok()),
+        MockResponse::ok(blockhash_valid_ok()),
+        MockResponse::ok(performance_ok()),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":8,"result":100}"#),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":9,"result":null}"#),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":10,"result":null}"#),
+    ];
+    let server = MockRpcServer::start(responses);
+    let report = run_check(args_for(server.url.clone())).await.unwrap();
+    server.join();
+    assert!(report.block_time_lag_secs.is_none());
+    assert!(report.prioritization_fee_median.is_none());
+}
+
+fn report_with_freshness(
+    url: &str,
+    lag: Option<i64>,
+    fee: Option<u64>,
+) -> solana_infra_doctor::checks::CheckReport {
+    let mut report =
+        compare_check_report(url, Verdict::Good, Some(347_000_000), Some(50), true, &[]);
+    report.block_time_lag_secs = lag;
+    report.prioritization_fee_median = fee;
+    report
+}
+
+#[test]
+fn compare_block_time_freshness_scoring_and_render() {
+    let stale = report_with_freshness("https://stale.example.com/", Some(120), Some(5000));
+    let fresh = report_with_freshness("https://fresh.example.com/", Some(10), Some(5000));
+    let report = build_compare_report(CompareProfile::Indexer, &[stale, fresh]);
+
+    // The fresher finalized tip scores higher; the stale one is penalized + noted.
+    assert!(report.endpoints[1].score > report.endpoints[0].score);
+    assert!(report.endpoints[0]
+        .notes
+        .iter()
+        .any(|note| note.contains("Finalized block time is stale")));
+
+    // Verbose output surfaces the new fields (Some branches of the formatters).
+    let verbose = render_compare_human(&report, plain(), true);
+    assert!(verbose.contains("Block time lag"));
+    assert!(verbose.contains("120s behind"));
+    assert!(verbose.contains("Median priority fee"));
+    assert!(verbose.contains("5000 micro-lamports/CU"));
 }

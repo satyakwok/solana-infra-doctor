@@ -25,6 +25,16 @@ pub fn score_endpoint(profile: CompareProfile, endpoint: &CompareEndpoint) -> u8
         Some(_) | None => 0,
     };
 
+    // Block-time freshness of the finalized tip (a healthy chain finalizes
+    // ~13-15s behind wall clock). A much larger lag means a stale endpoint.
+    // `None` (method unavailable) is neutral, not penalized.
+    score += match endpoint.block_time_lag_secs {
+        Some(lag) if lag <= 20 => 10,
+        Some(lag) if lag <= 45 => 5,
+        Some(_) => 0,
+        None => 0,
+    };
+
     if endpoint.blockhash_valid {
         score += 15;
     }
@@ -55,6 +65,10 @@ pub fn score_endpoint(profile: CompareProfile, endpoint: &CompareEndpoint) -> u8
         CompareProfile::Indexer => {
             if endpoint.slot_lag.is_some_and(|lag| lag > 50) {
                 score -= 15;
+            }
+            // Indexers are freshness-sensitive: penalize a stale finalized tip.
+            if endpoint.block_time_lag_secs.is_some_and(|lag| lag > 45) {
+                score -= 10;
             }
             if endpoint
                 .failed_checks
@@ -115,6 +129,12 @@ pub(crate) fn profile_notes(profile: CompareProfile, endpoint: &CompareEndpoint)
         CompareProfile::Indexer => {
             if endpoint.slot_lag.is_some_and(|lag| lag > 50) {
                 notes.push("Slot lag is high for indexer catch-up and freshness.".to_string());
+            }
+            if endpoint.block_time_lag_secs.is_some_and(|lag| lag > 45) {
+                notes.push(
+                    "Finalized block time is stale relative to wall clock for indexer freshness."
+                        .to_string(),
+                );
             }
             if endpoint
                 .failed_checks

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Add two new diagnostic checks: **`getBlockTime`** (on the latest finalized
+  slot) yields how far the finalized chain tip lags wall clock — a **freshness**
+  signal — and **`getRecentPrioritizationFees`** surfaces the median recent
+  priority fee as **fee-market context**. (We use `getBlockTime` rather than
+  `getBlock`, which returns "Block not available" for recent slots on public RPC.)
+- Improve scoring: **block-time freshness** is now a scoring signal (a stale
+  finalized tip scores lower; indexers penalize it more and note it).
+  Prioritization fees are chain-wide, so they are surfaced as context but do not
+  affect the per-endpoint score. New fields appear in human output, JSON
+  (`block_time_lag_secs`, `prioritization_fee_median`), and the Markdown report.
+  `getFeeForMessage` was intentionally not added (it requires constructing a
+  signed message; low marginal value).
 - Make the `ws` diagnostic **reconnect with exponential backoff** when a
   connection fails to establish or drops before the first notification (up to 3
   reconnects). A connected-but-quiet endpoint is not retried. The number of

@@ -74,6 +74,16 @@ pub struct BlockhashValidResponse {
     pub value: bool,
 }
 
+/// One entry from `getRecentPrioritizationFees`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct PrioritizationFee {
+    /// The slot the fee was observed in.
+    pub slot: u64,
+    /// The per-compute-unit prioritization fee (micro-lamports), `0` when none.
+    #[serde(rename = "prioritizationFee")]
+    pub prioritization_fee: u64,
+}
+
 /// One entry from `getRecentPerformanceSamples`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct PerformanceSample {
