@@ -16,6 +16,7 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![Rust](https://img.shields.io/badge/rust-1.76%2B-orange.svg)](https://www.rust-lang.org/)
 [![Status](https://img.shields.io/badge/status-active-blue.svg)](#commands)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/satyakwok/solana-infra-doctor)
 
 **A local-first Rust CLI for Solana RPC production-readiness diagnostics, comparison, WebSocket checks, and redaction-safe reports.**
 
