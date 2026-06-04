@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0 - Unreleased
+## 0.4.0 - 2026-06-04
 
 - Add TTY-aware, semantic color to human terminal output for `check`, `compare`,
   and `ws`: verdicts and `OK`/`FAIL` markers carry status colors, labels are

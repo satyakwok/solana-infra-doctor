@@ -44,7 +44,9 @@ Check WebSocket realtime readiness (`sol-doctor ws`):
 
 ![sol-doctor ws output](https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/assets/ws.png)
 
-Screenshots are real runs against public endpoints; values vary per run.
+Screenshots are real runs against public endpoints, captured with color
+enabled; values vary per run. See [Color output](#color-output) for how color is
+controlled.
 
 ## Install
 
@@ -319,31 +321,38 @@ output is byte-for-byte identical to the uncolored output.
 
 ## Human Output Example
 
+This is a real run against `https://api.mainnet-beta.solana.com` (on a terminal
+this output is colorized; see the [Demo](#demo) screenshots):
+
 ```text
 Solana Infra Doctor
 ===================
 RPC URL: https://api.mainnet-beta.solana.com/
 Verdict: GOOD
 Summary: all RPC readiness checks succeeded
-Average latency: 42ms
+Average latency: 12ms
 
 Checks:
 
 Core:
-- getHealth                    OK       35ms  health is ok
-- getVersion                   OK       39ms  solana-core 4.0.0
-- getGenesisHash               OK       41ms  5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
-- getSlot                      OK       38ms  slot 424013263
+- getHealth                    OK       32ms  health is ok
+- getVersion                   OK        5ms  solana-core 4.0.0
+- getGenesisHash               OK        8ms  5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+- getSlot                      OK        4ms  slot 424135210
 
 Blockhash:
-- getLatestBlockhash           OK       44ms  7xKXtgQv...example
-- isBlockhashValid             OK       40ms  latest blockhash is valid
+- getLatestBlockhash           OK        4ms  6GWATk9t7puKX48hcMW2fPiZ3HvCUV8VpgtgYwVykv3W
+- isBlockhashValid             OK        6ms  latest blockhash is valid
 
 Performance:
-- getRecentPerformanceSamples  OK       47ms  124000 transactions across 64 slots in 60s
+- getRecentPerformanceSamples  OK       27ms  204903 transactions across 148 slots in 60s
 ```
 
 ## Compare Output Example
+
+A real `bot`-profile comparison of two public mainnet endpoints. Note that the
+lower-latency endpoint (RPC #1) is not the winner: RPC #2 serves fresher slots,
+which the `bot` profile weighs more heavily.
 
 ```text
 Solana Infra Doctor — RPC Compare
@@ -352,30 +361,31 @@ Profile: bot
 
 RPC #1
 URL: https://api.mainnet-beta.solana.com/
+Genesis: 5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
 Verdict: GOOD
-Score: 90/100
-Slot: 347000000
-Slot lag: baseline
-Average latency: 142ms
+Score: 83/100
+Slot: 424135210
+Slot lag: 32 slots behind
+Average latency: 12ms
 Failed checks: none
+Blockhash valid: yes
 
 RPC #2
-URL: https://***.provider.com/
-Verdict: WARNING
-Score: 15/100
-Slot: 346999700
-Slot lag: 300 slots behind
-Average latency: 812ms
-Failed checks: getRecentPerformanceSamples
-Notes:
-- Average latency is high for latency-sensitive bot workloads.
-- Slot lag is high for slot-sensitive bot workloads.
+URL: https://solana-rpc.publicnode.com/
+Genesis: 5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+Verdict: GOOD
+Score: 90/100
+Slot: 424135242
+Slot lag: baseline
+Average latency: 99ms
+Failed checks: none
+Blockhash valid: yes
 
 Recommendation:
-Best RPC: RPC #1
-Worst RPC: RPC #2
-RPC #1 is recommended for bot workloads.
-Avoid RPC #2 for latency-sensitive or slot-sensitive workloads.
+Best RPC: RPC #2
+Worst RPC: RPC #1
+RPC #2 is recommended for bot workloads.
+RPC #1 has lower latency, but RPC #2 is fresher. For bot workloads, slot freshness may matter more than raw HTTP latency.
 ```
 
 ## JSON Output Example
