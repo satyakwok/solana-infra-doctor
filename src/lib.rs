@@ -40,6 +40,7 @@
 
 pub mod checks;
 pub mod cli;
+pub mod color;
 pub mod compare;
 pub mod error;
 pub mod latency;

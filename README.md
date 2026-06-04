@@ -300,6 +300,23 @@ time-to-first-slot-notification, unsubscribes, and closes. Override the derived
 URL with `--ws wss://...` when a provider uses a separate WebSocket host, and
 emit JSON with `--json`.
 
+### Color output
+
+Human output is colorized when stdout is a terminal. Color is **semantic**:
+verdicts and `OK`/`FAIL` markers carry status colors, labels are muted, and
+section titles are emphasized. Control it with the global `--color` flag
+(`check`, `compare`, and `ws` all accept it):
+
+```bash
+sol-doctor check --rpc https://api.mainnet-beta.solana.com --color auto    # default: color only on a TTY
+sol-doctor check --rpc https://api.mainnet-beta.solana.com --color always  # force color (e.g. piping into a pager that renders ANSI)
+sol-doctor check --rpc https://api.mainnet-beta.solana.com --color never   # disable color
+```
+
+`--json` output is never colorized, and the [`NO_COLOR`](https://no-color.org/)
+environment variable is honored under `--color auto`. When color is off, the
+output is byte-for-byte identical to the uncolored output.
+
 ## Human Output Example
 
 ```text

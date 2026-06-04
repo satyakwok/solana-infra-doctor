@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 - Unreleased
+
+- Add TTY-aware, semantic color to human terminal output for `check`, `compare`,
+  and `ws`: verdicts and `OK`/`FAIL` markers carry status colors, labels are
+  muted, and titles are emphasized, using a restrained truecolor palette.
+- Add the global `--color auto|always|never` flag (default `auto`), auto-detect
+  whether stdout is a terminal, and honor the `NO_COLOR` environment variable.
+- Never colorize `--json` output; keep non-TTY / piped output byte-for-byte
+  identical to the previous uncolored output.
+
 ## 0.3.0 - 2026-06-04
 
 - Reorganize the diagnostic engine into clean internal modules (`checks`,

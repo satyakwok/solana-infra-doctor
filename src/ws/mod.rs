@@ -1,7 +1,9 @@
 //! WebSocket readiness diagnostics: connect, `slotSubscribe`, measure
 //! time-to-first-slot-notification, unsubscribe, and close.
 
-use crate::{cli::WsArgs, error::AppError, redact, rpc::RpcEndpoint, verdict::Verdict};
+use crate::{
+    cli::WsArgs, color::Palette, error::AppError, redact, rpc::RpcEndpoint, verdict::Verdict,
+};
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
 use serde_json::Value;
@@ -179,28 +181,59 @@ async fn unsubscribe(
 }
 
 pub fn render_human(report: &WsReport) -> String {
-    let mut output = String::new();
-    output.push_str("Solana Infra Doctor — WebSocket\n");
-    output.push_str("===============================\n");
-    output.push_str(&format!("RPC URL: {}\n", report.rpc_url));
-    output.push_str(&format!("WS URL:  {}\n", report.ws_url));
-    output.push_str(&format!("Verdict: {}\n", report.verdict));
-    output.push_str(&format!("Summary: {}\n\n", report.summary));
+    render_human_colored(report, Palette::new(false))
+}
 
+pub fn render_human_colored(report: &WsReport, palette: Palette) -> String {
+    let mut output = String::new();
+    output.push_str(&palette.title("Solana Infra Doctor — WebSocket"));
+    output.push('\n');
+    output.push_str(&palette.label("==============================="));
+    output.push('\n');
     output.push_str(&format!(
-        "Connect:      {}\n",
-        format_step(report.connected, report.connect_latency_ms.map(format_ms)),
+        "{} {}\n",
+        palette.label("RPC URL:"),
+        report.rpc_url
     ));
     output.push_str(&format!(
-        "Subscribe:    {}\n",
+        "{} {}\n",
+        palette.label("WS URL: "),
+        report.ws_url
+    ));
+    output.push_str(&format!(
+        "{} {}\n",
+        palette.label("Verdict:"),
+        palette.verdict(report.verdict)
+    ));
+    output.push_str(&format!(
+        "{} {}\n\n",
+        palette.label("Summary:"),
+        report.summary
+    ));
+
+    output.push_str(&format!(
+        "{}{}\n",
+        palette.label("Connect:      "),
         format_step(
+            palette,
+            report.connected,
+            report.connect_latency_ms.map(format_ms)
+        ),
+    ));
+    output.push_str(&format!(
+        "{}{}\n",
+        palette.label("Subscribe:    "),
+        format_step(
+            palette,
             report.subscribed,
             Some(format!("{} (id 1)", report.subscription_method))
         ),
     ));
     output.push_str(&format!(
-        "First slot:   {}\n",
+        "{}{}\n",
+        palette.label("First slot:   "),
         format_step(
+            palette,
             report.first_slot.is_some(),
             report
                 .time_to_first_notification_ms
@@ -211,16 +244,20 @@ pub fn render_human(report: &WsReport) -> String {
         ),
     ));
     output.push_str(&format!(
-        "Unsubscribe:  {}\n",
-        format_step(report.unsubscribed, None)
+        "{}{}\n",
+        palette.label("Unsubscribe:  "),
+        format_step(palette, report.unsubscribed, None)
     ));
     output.push_str(&format!(
-        "Close:        {}\n",
-        format_step(report.closed_cleanly, None)
+        "{}{}\n",
+        palette.label("Close:        "),
+        format_step(palette, report.closed_cleanly, None)
     ));
 
     if !report.notes.is_empty() {
-        output.push_str("\nNotes:\n");
+        output.push('\n');
+        output.push_str(&palette.heading("Notes:"));
+        output.push('\n');
         for note in &report.notes {
             output.push_str(&format!("- {note}\n"));
         }
@@ -232,11 +269,22 @@ pub fn render_json(report: &WsReport) -> Result<String, AppError> {
     serde_json::to_string_pretty(report).map_err(AppError::SerializeReport)
 }
 
-fn format_step(ok: bool, detail: Option<String>) -> String {
-    let status = if ok { "OK" } else { "FAIL" };
+fn format_step(palette: Palette, ok: bool, detail: Option<String>) -> String {
+    // Pad to a fixed visible width before colorizing so ANSI never disturbs
+    // alignment; the no-detail case has nothing to align against.
+    let paint = |text: &str| {
+        if ok {
+            palette.ok(text)
+        } else {
+            palette.fail(text)
+        }
+    };
     match detail {
-        Some(detail) => format!("{status:<5} {detail}"),
-        None => status.to_string(),
+        Some(detail) => format!(
+            "{} {detail}",
+            paint(&format!("{:<5}", if ok { "OK" } else { "FAIL" }))
+        ),
+        None => paint(if ok { "OK" } else { "FAIL" }),
     }
 }
 

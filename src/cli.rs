@@ -10,6 +10,10 @@ use std::path::PathBuf;
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
+
+    /// When to colorize human output (JSON output is never colored).
+    #[arg(long, global = true, value_enum, default_value_t = crate::color::ColorChoice::Auto)]
+    pub color: crate::color::ColorChoice,
 }
 
 #[derive(Debug, Subcommand)]

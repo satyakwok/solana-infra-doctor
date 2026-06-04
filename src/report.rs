@@ -1,5 +1,6 @@
 use crate::{
     checks::{CheckCategory, CheckReport, CheckStatus},
+    color::Palette,
     error::AppError,
 };
 
@@ -14,6 +15,11 @@ pub fn print_report(report: &CheckReport) -> Result<(), AppError> {
     Ok(())
 }
 
+pub fn print_report_colored(report: &CheckReport, palette: Palette) -> Result<(), AppError> {
+    println!("{}", render_human_colored(report, palette));
+    Ok(())
+}
+
 pub fn print_json(report: &CheckReport) -> Result<(), AppError> {
     let json = render_json(report)?;
     println!("{json}");
@@ -21,24 +27,49 @@ pub fn print_json(report: &CheckReport) -> Result<(), AppError> {
 }
 
 pub fn render_human(report: &CheckReport) -> String {
+    render_human_colored(report, Palette::new(false))
+}
+
+pub fn render_human_colored(report: &CheckReport, palette: Palette) -> String {
     let average = report
         .average_latency_ms
         .map_or_else(|| "n/a".to_string(), |value| format!("{value}ms"));
     let mut output = String::new();
 
-    output.push_str("Solana Infra Doctor\n");
-    output.push_str("===================\n");
-    output.push_str(&format!("RPC URL: {}\n", report.rpc_url));
-    output.push_str(&format!("Verdict: {}\n", report.verdict));
-    output.push_str(&format!("Summary: {}\n", report.summary));
-    output.push_str(&format!("Average latency: {average}\n"));
+    output.push_str(&palette.title("Solana Infra Doctor"));
+    output.push('\n');
+    output.push_str(&palette.label("==================="));
+    output.push('\n');
+    output.push_str(&format!(
+        "{} {}\n",
+        palette.label("RPC URL:"),
+        report.rpc_url
+    ));
+    output.push_str(&format!(
+        "{} {}\n",
+        palette.label("Verdict:"),
+        palette.verdict(report.verdict)
+    ));
+    output.push_str(&format!(
+        "{} {}\n",
+        palette.label("Summary:"),
+        report.summary
+    ));
+    output.push_str(&format!(
+        "{} {average}\n",
+        palette.label("Average latency:")
+    ));
     if report.fail_on_warning {
         output.push_str(
-            "Warning policy: --fail-on-warning enabled; WARNING exits with code 1 for CI.\n",
+            &palette.label(
+                "Warning policy: --fail-on-warning enabled; WARNING exits with code 1 for CI.",
+            ),
         );
+        output.push('\n');
     }
     output.push('\n');
-    output.push_str("Checks:\n");
+    output.push_str(&palette.heading("Checks:"));
+    output.push('\n');
 
     for category in CATEGORY_ORDER {
         let checks: Vec<_> = report
@@ -50,21 +81,26 @@ pub fn render_human(report: &CheckReport) -> String {
             continue;
         }
 
-        output.push_str(&format!("\n{}:\n", category.label()));
+        output.push('\n');
+        output.push_str(&palette.heading(&format!("{}:", category.label())));
+        output.push('\n');
         for check in checks {
-            let status = match check.status {
-                CheckStatus::Success => "OK",
-                CheckStatus::Failed => "FAIL",
+            // Pad each cell to a fixed visible width first, then colorize, so
+            // ANSI codes never disturb column alignment.
+            let status_cell = match check.status {
+                CheckStatus::Success => palette.ok(&format!("{:<4}", "OK")),
+                CheckStatus::Failed => palette.fail(&format!("{:<4}", "FAIL")),
             };
             let latency = check
                 .latency_ms
                 .map_or_else(|| "n/a".to_string(), |value| format!("{value}ms"));
-            let error_kind = check
-                .error_kind
-                .map_or_else(String::new, |kind| format!(" [{}]", kind.label()));
+            let latency_cell = palette.label(&format!("{latency:>8}"));
+            let error_kind = check.error_kind.map_or_else(String::new, |kind| {
+                palette.label(&format!(" [{}]", kind.label()))
+            });
             output.push_str(&format!(
-                "- {:<28} {:<4} {:>8}  {}{}\n",
-                check.method, status, latency, check.detail, error_kind
+                "- {:<28} {} {}  {}{}\n",
+                check.method, status_cell, latency_cell, check.detail, error_kind
             ));
         }
     }
