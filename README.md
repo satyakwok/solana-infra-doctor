@@ -609,8 +609,10 @@ Inputs: `command` (`check`/`ws`/`compare`, default `check`), `rpc`,
 `fail-on-warning`, `samples`, `timeout-ms`, `json`, `verbose`, `version`, and
 `args` (raw passthrough — e.g. extra `--rpc` for `compare`). The job's success
 follows the [exit codes](#exit-codes) above, so a `BAD` endpoint (or `WARNING`
-with `fail-on-warning`) fails the step. Pin a released tag (e.g. `@v0.9.0`) for
-reproducible runs.
+with `fail-on-warning`) fails the step. Use the moving major tag `@v1`, or pin a
+specific release tag (e.g. `@v0.9.0`) for fully reproducible runs.
+
+> `fail-on-warning` and `samples` apply to `command: check` only.
 
 ## Current Limitations
 

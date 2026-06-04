@@ -81,11 +81,15 @@ runs:
         set -euo pipefail
         cmd=(sol-doctor "$COMMAND")
         if [ -n "$RPC" ]; then cmd+=(--rpc "$RPC"); fi
-        if [ "$FAIL_ON_WARNING" = "true" ]; then cmd+=(--fail-on-warning); fi
         if [ "$JSON" = "true" ]; then cmd+=(--json); fi
         if [ "$VERBOSE" = "true" ]; then cmd+=(--verbose); fi
-        if [ -n "$SAMPLES" ]; then cmd+=(--samples "$SAMPLES"); fi
         if [ -n "$TIMEOUT_MS" ]; then cmd+=(--timeout-ms "$TIMEOUT_MS"); fi
+        # --fail-on-warning and --samples exist only on `check`; adding them to
+        # `ws`/`compare` would be a clap parse error, so gate them on the command.
+        if [ "$COMMAND" = "check" ]; then
+          if [ "$FAIL_ON_WARNING" = "true" ]; then cmd+=(--fail-on-warning); fi
+          if [ -n "$SAMPLES" ]; then cmd+=(--samples "$SAMPLES"); fi
+        fi
         if [ -n "$EXTRA_ARGS" ]; then
           read -ra extra <<< "$EXTRA_ARGS"
           cmd+=("${extra[@]}")
