@@ -5,3 +5,6 @@
 .vscode/
 *.log
 lcov.info
+
+# Local Claude Code state (never committed or published)
+.claude/
