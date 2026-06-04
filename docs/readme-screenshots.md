@@ -14,6 +14,24 @@ are not mockups, and the values are not hardcoded.
 - **Snapshots, not guarantees.** Values vary by time, region, this VPS's network
   egress, and endpoint conditions. A snapshot is not an SLA or uptime guarantee.
 
+## A monospace font is required
+
+The human output aligns columns with spaces, so the renderer must be displayed
+in a **genuinely monospace font**. A proportional font — including a silent
+fallback when the requested font is not installed — makes the `Status`,
+`Summary`, and `Detail` columns visibly drift even though the underlying text is
+correctly aligned.
+
+When capturing, **pin an installed monospace family explicitly** with
+`--font.family`. Do not rely on the renderer's default font, and do not use a
+user-level `freeze` config that could override it. Verify the family resolves to
+itself (not a fallback) before capturing:
+
+```bash
+fc-match -f '%{family}\n' "DejaVu Sans Mono"   # must print "DejaVu Sans Mono"
+fc-list :spacing=mono family | sort -u          # list installed monospace families
+```
+
 ## Rules for regenerating them
 
 - **Public endpoints only.** Use endpoints that need no credentials
@@ -28,24 +46,29 @@ are not mockups, and the values are not hardcoded.
 
 ## How to regenerate
 
-Screenshots are refreshed **manually** (never in CI) with:
+Screenshots are refreshed **manually** (never in CI). Build the release binary,
+then capture each command live with `--color always` (so color survives the
+non-TTY capture) and an explicit monospace font, writing `docs/images/cli/*.png`:
 
 ```bash
-./scripts/capture-readme-screenshots.sh
+cargo build --release
+BIN=./target/release/sol-doctor
+FONT="DejaVu Sans Mono"   # any installed monospace family (see above)
+STYLE=(--font.family "$FONT" --font.size 19 --line-height 1.3 \
+       --window --background "#0b0f17" --padding 24 --margin 0 \
+       --border.radius 10 --border.width 1 --border.color "#1d2433")
+
+freeze --execute "$BIN check --rpc https://api.mainnet-beta.solana.com --color always" \
+  --output docs/images/cli/check.png "${STYLE[@]}"
+freeze --execute "$BIN compare --rpc https://api.mainnet-beta.solana.com --rpc https://solana-rpc.publicnode.com --profile bot --color always" \
+  --output docs/images/cli/compare.png "${STYLE[@]}"
+freeze --execute "$BIN ws --rpc https://api.mainnet-beta.solana.com --color always" \
+  --output docs/images/cli/ws.png "${STYLE[@]}"
 ```
 
-The script builds the release binary, verifies its version, requires
-[`freeze`](https://github.com/charmbracelet/freeze), runs each command live with
-`--color always`, and writes `docs/images/cli/*.png`.
-
-The exact commands captured are:
-
-```bash
-sol-doctor check   --rpc https://api.mainnet-beta.solana.com --color always
-sol-doctor compare --rpc https://api.mainnet-beta.solana.com \
-                   --rpc https://solana-rpc.publicnode.com --profile bot --color always
-sol-doctor ws      --rpc https://api.mainnet-beta.solana.com --color always
-```
+`ws` connects to a live WebSocket and occasionally needs a retry if a single run
+is slow to receive the first notification — re-run that one capture; do not edit
+the image.
 
 ## `freeze` is documentation tooling, not a dependency
 

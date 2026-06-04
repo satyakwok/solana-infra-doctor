@@ -1850,3 +1850,120 @@ fn compare_recommendation_falls_back_when_best_index_has_no_endpoint() {
     assert!(human.contains("Best RPC: #99 · 99"));
     assert!(human.contains("Use RPC #99."));
 }
+
+/// Remove ANSI SGR escape sequences (`\x1b[ ... m`) so visible column positions
+/// can be measured regardless of color.
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::new();
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            for esc in chars.by_ref() {
+                if esc == 'm' {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn line_with<'a>(text: &'a str, needle: &str) -> &'a str {
+    text.lines()
+        .find(|line| line.contains(needle))
+        .unwrap_or_else(|| panic!("no line containing {needle:?}"))
+}
+
+fn col(text: &str, row_needle: &str, col_needle: &str) -> usize {
+    line_with(text, row_needle)
+        .find(col_needle)
+        .unwrap_or_else(|| panic!("{col_needle:?} not found in row {row_needle:?}"))
+}
+
+#[test]
+fn human_output_columns_align_with_and_without_color() {
+    let check = compare_check_report(
+        "https://api.mainnet-beta.solana.com/",
+        Verdict::Good,
+        Some(347_000_000),
+        Some(12),
+        true,
+        &[],
+    );
+    let compare = build_compare_report(
+        CompareProfile::Bot,
+        &[
+            compare_check_report(
+                "https://api.mainnet-beta.solana.com/",
+                Verdict::Good,
+                Some(347_000_000),
+                Some(12),
+                true,
+                &[],
+            ),
+            compare_check_report(
+                "https://solana-rpc.publicnode.com/",
+                Verdict::Good,
+                Some(347_000_050),
+                Some(102),
+                true,
+                &[],
+            ),
+        ],
+    );
+    let ws = WsReport {
+        verdict: Verdict::Good,
+        rpc_url: "https://api.mainnet-beta.solana.com/".to_string(),
+        ws_url: "wss://api.mainnet-beta.solana.com/".to_string(),
+        connected: true,
+        connect_latency_ms: Some(60),
+        subscription_method: "slotSubscribe",
+        subscribed: true,
+        time_to_first_notification_ms: Some(269),
+        first_slot: Some(424_146_684),
+        unsubscribed: true,
+        closed_cleanly: true,
+        summary: "WebSocket readiness checks passed".to_string(),
+        notes: Vec::new(),
+    };
+
+    // Alignment must hold whether color is on (after stripping ANSI) or off.
+    for palette in [plain(), colored()] {
+        // check: the Status column starts at the same index on every row.
+        let out = strip_ansi(&render_human(&check, palette, false));
+        let status = col(&out, "Category", "Status");
+        assert_eq!(col(&out, "Core", "PASS"), status);
+        assert_eq!(col(&out, "Blockhash", "PASS"), status);
+        assert_eq!(col(&out, "Performance", "PASS"), status);
+
+        // ws: the Status and Detail columns line up across every step.
+        let out = strip_ansi(&ws_render_human(&ws, palette, false));
+        let status = col(&out, "Check ", "Status");
+        let detail = col(&out, "Check ", "Detail");
+        assert_eq!(col(&out, "Connect", "PASS"), status);
+        assert_eq!(col(&out, "First notification", "PASS"), status);
+        assert_eq!(col(&out, "Close", "PASS"), status);
+        assert_eq!(col(&out, "Connect", "60 ms"), detail);
+        assert_eq!(col(&out, "First notification", "269 ms"), detail);
+
+        // compare: the Verdict column lines up across every endpoint.
+        let out = strip_ansi(&render_compare_human(&compare, palette, false));
+        let verdict = col(&out, "Endpoint", "Verdict");
+        assert_eq!(col(&out, "#1 ", "GOOD"), verdict);
+        assert_eq!(col(&out, "#2 ", "GOOD"), verdict);
+
+        // No tabs are ever used for alignment.
+        assert!(!render_human(&check, palette, false).contains('\t'));
+        assert!(!ws_render_human(&ws, palette, false).contains('\t'));
+        assert!(!render_compare_human(&compare, palette, false).contains('\t'));
+    }
+
+    // Machine formats never carry ANSI, even rendered from the same reports.
+    assert!(!render_json(&check).unwrap().contains('\x1b'));
+    assert!(!render_compare_json(&compare).unwrap().contains('\x1b'));
+    assert!(!ws_render_json(&ws).unwrap().contains('\x1b'));
+    assert!(!render_markdown(&compare).contains('\x1b'));
+    assert!(!render_markdown(&compare).contains('\t'));
+}

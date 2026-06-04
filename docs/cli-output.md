@@ -40,6 +40,13 @@ Tip: run with --verbose to see full details.
 `compare` defaults to a one-row-per-endpoint summary table, and `ws` to a compact
 step table. See [README CLI Preview](../README.md#cli-preview) for live screenshots.
 
+The summary tables align columns with spaces, so they assume a **monospace
+terminal font** — in a proportional font the columns will appear to drift even
+though the text is correctly aligned. Verbose output may also wrap depending on
+terminal width. This is another reason automation should consume `--json` rather
+than parse the human text: the layout targets a human reading a monospace
+terminal, while JSON is the stable contract.
+
 ### `--verbose` (`-v`)
 
 `--verbose` expands the human output with full per-check detail: the full
