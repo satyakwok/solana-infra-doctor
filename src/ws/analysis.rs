@@ -7,6 +7,24 @@ use url::Url;
 const GOOD_NOTIFY_MS: u128 = 2_000;
 
 pub fn classify(report: &WsReport) -> (Verdict, String, Vec<String>) {
+    let (verdict, summary, mut notes) = classify_outcome(report);
+    // Surface reconnects regardless of the final verdict — a connection that
+    // needed retries is worth noting even when it eventually succeeded.
+    if report.reconnect_attempts > 0 {
+        // Neutral wording: accurate whether the retries eventually succeeded
+        // (GOOD/WARNING) or were exhausted (BAD).
+        notes.insert(
+            0,
+            format!(
+                "Connection was retried {} time(s) during the check.",
+                report.reconnect_attempts
+            ),
+        );
+    }
+    (verdict, summary, notes)
+}
+
+fn classify_outcome(report: &WsReport) -> (Verdict, String, Vec<String>) {
     if !report.connected {
         return (
             Verdict::Bad,
@@ -17,14 +35,14 @@ pub fn classify(report: &WsReport) -> (Verdict, String, Vec<String>) {
     if !report.subscribed {
         return (
             Verdict::Bad,
-            "slotSubscribe did not succeed".to_string(),
+            format!("{} did not succeed", report.subscription_method),
             Vec::new(),
         );
     }
     match report.time_to_first_notification_ms {
         None => (
             Verdict::Bad,
-            "No slot notification received before timeout".to_string(),
+            "No notification received before timeout".to_string(),
             Vec::new(),
         ),
         Some(ms) if ms <= GOOD_NOTIFY_MS && report.unsubscribed && report.closed_cleanly => (

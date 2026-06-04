@@ -322,9 +322,18 @@ sol-doctor ws --rpc https://api.mainnet-beta.solana.com
 
 `ws` derives the WebSocket URL from the HTTP RPC URL (`https` → `wss`,
 `http` → `ws`), connects, subscribes with `slotSubscribe`, measures the
-time-to-first-slot-notification, unsubscribes, and closes. Override the derived
-URL with `--ws wss://...` when a provider uses a separate WebSocket host, and
-emit JSON with `--json`.
+time-to-first-notification, unsubscribes, and closes. Override the derived URL
+with `--ws wss://...` when a provider uses a separate WebSocket host, and emit
+JSON with `--json`.
+
+If a connection fails to establish or drops before the first notification, `ws`
+**reconnects with exponential backoff** (up to a few attempts) before giving up;
+the number of reconnects is reported. Choose a different subscription to test
+with `--subscription` (`slot`, the default, or `logs`):
+
+```bash
+sol-doctor ws --rpc https://api.mainnet-beta.solana.com --subscription logs
+```
 
 ### Color output
 

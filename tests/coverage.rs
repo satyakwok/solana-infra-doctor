@@ -1188,6 +1188,7 @@ fn ws_args(ws_url: Option<String>, timeout_ms: u64) -> WsArgs {
     WsArgs {
         rpc: "https://example.com".to_string(),
         ws: ws_url,
+        subscription: solana_infra_doctor::ws::Subscription::Slot,
         json: false,
         timeout_ms,
     }
@@ -1273,6 +1274,7 @@ async fn ws_invalid_rpc_and_ws_urls_are_rejected() {
     let invalid_rpc = run_ws(WsArgs {
         rpc: "not a url".to_string(),
         ws: None,
+        subscription: solana_infra_doctor::ws::Subscription::Slot,
         json: false,
         timeout_ms: 1_000,
     })
@@ -1284,6 +1286,7 @@ async fn ws_invalid_rpc_and_ws_urls_are_rejected() {
     let invalid_ws = run_ws(WsArgs {
         rpc: "https://example.com".to_string(),
         ws: Some("ftp://example.com".to_string()),
+        subscription: solana_infra_doctor::ws::Subscription::Slot,
         json: false,
         timeout_ms: 1_000,
     })
@@ -1348,6 +1351,7 @@ fn ws_classify_covers_warning_and_bad_branches() {
         first_slot: Some(100),
         unsubscribed: true,
         closed_cleanly: true,
+        reconnect_attempts: 0,
         summary: String::new(),
         notes: Vec::new(),
     };
@@ -1365,6 +1369,7 @@ fn ws_classify_covers_warning_and_bad_branches() {
     let unclean = WsReport {
         unsubscribed: false,
         closed_cleanly: false,
+        reconnect_attempts: 0,
         ..base.clone()
     };
     assert_eq!(classify(&unclean).0, Verdict::Warning);
@@ -1415,6 +1420,7 @@ fn ws_render_human_shows_degraded_steps_and_notes() {
         first_slot: Some(123),
         unsubscribed: false,
         closed_cleanly: false,
+        reconnect_attempts: 0,
         summary: "websocket is reachable but realtime behavior is degraded".to_string(),
         notes: vec!["First slot notification was slow at 5000ms.".to_string()],
     };
@@ -1643,6 +1649,7 @@ fn colored_human_output_is_semantic_and_disabled_is_byte_identical() {
         first_slot: Some(123),
         unsubscribed: false,
         closed_cleanly: false,
+        reconnect_attempts: 0,
         summary: "degraded".to_string(),
         notes: vec!["First notification was slow at 5000 ms.".to_string()],
     };
@@ -1814,6 +1821,7 @@ fn ws_verbose_shows_full_rpc_url() {
         first_slot: Some(100),
         unsubscribed: true,
         closed_cleanly: true,
+        reconnect_attempts: 0,
         summary: "WebSocket readiness checks passed".to_string(),
         notes: Vec::new(),
     };
@@ -1929,6 +1937,7 @@ fn human_output_columns_align_with_and_without_color() {
         first_slot: Some(424_146_684),
         unsubscribed: true,
         closed_cleanly: true,
+        reconnect_attempts: 0,
         summary: "WebSocket readiness checks passed".to_string(),
         notes: Vec::new(),
     };
@@ -2084,4 +2093,80 @@ fn rpc_endpoint_debug_redacts_credentials() {
     assert!(!debug.contains("user:pass"));
     assert!(!debug.contains("secret"));
     assert!(debug.contains("***:***@example.com"));
+}
+
+/// A mock WebSocket server that drops the first connection (a transient blip)
+/// and serves a happy session on the second, exercising reconnect.
+async fn start_mock_ws_reconnecting() -> String {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::{accept_async, tungstenite::Message};
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    tokio::spawn(async move {
+        let confirm = r#"{"jsonrpc":"2.0","result":7,"id":1}"#;
+        let notification = r#"{"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":1,"root":1,"slot":424000000},"subscription":7}}"#;
+
+        // First connection: accept, then drop without a notification.
+        if let Ok((stream, _)) = listener.accept().await {
+            if let Ok(mut ws) = accept_async(stream).await {
+                let _ = ws.next().await; // subscribe request
+                let _ = ws.close(None).await;
+            }
+        }
+        // Second connection: behave happily.
+        if let Ok((stream, _)) = listener.accept().await {
+            if let Ok(mut ws) = accept_async(stream).await {
+                let _ = ws.next().await; // subscribe request
+                let _ = ws.send(Message::text(confirm)).await;
+                let _ = ws.send(Message::text(notification)).await;
+                let _ = ws.next().await; // unsubscribe request
+                let _ = ws
+                    .send(Message::text(r#"{"jsonrpc":"2.0","result":true,"id":2}"#))
+                    .await;
+                let _ = ws.close(None).await;
+            }
+        }
+    });
+
+    format!("ws://127.0.0.1:{port}")
+}
+
+#[tokio::test]
+async fn ws_reconnects_after_dropped_connection() {
+    let url = start_mock_ws_reconnecting().await;
+    let report = run_ws(ws_args(Some(url), 2_000)).await.unwrap();
+
+    assert_eq!(report.verdict, Verdict::Good);
+    assert!(report.reconnect_attempts >= 1);
+    assert!(report.connected);
+    assert_eq!(report.first_slot, Some(424_000_000));
+    // The reconnect is surfaced as a note in human output.
+    let human = ws_render_human(&report, plain(), false);
+    assert!(human.to_lowercase().contains("retried"));
+}
+
+#[test]
+fn ws_subscription_methods_for_slot_and_logs() {
+    use solana_infra_doctor::ws::Subscription;
+
+    assert_eq!(Subscription::Slot.method(), "slotSubscribe");
+    assert_eq!(Subscription::Slot.unsubscribe_method(), "slotUnsubscribe");
+    assert_eq!(Subscription::Slot.notification(), "slotNotification");
+    assert!(Subscription::Slot
+        .subscribe_request()
+        .contains("slotSubscribe"));
+
+    assert_eq!(Subscription::Logs.method(), "logsSubscribe");
+    assert_eq!(Subscription::Logs.unsubscribe_method(), "logsUnsubscribe");
+    assert_eq!(Subscription::Logs.notification(), "logsNotification");
+    assert!(Subscription::Logs
+        .subscribe_request()
+        .contains("logsSubscribe"));
+
+    let with_slot: serde_json::Value =
+        serde_json::from_str(r#"{"params":{"result":{"slot":42}}}"#).unwrap();
+    assert_eq!(Subscription::Slot.extract_slot(&with_slot), Some(42));
+    assert_eq!(Subscription::Logs.extract_slot(&with_slot), None);
 }

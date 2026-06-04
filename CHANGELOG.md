@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Make the `ws` diagnostic **reconnect with exponential backoff** when a
+  connection fails to establish or drops before the first notification (up to 3
+  reconnects). A connected-but-quiet endpoint is not retried. The number of
+  reconnects is reported (`reconnect_attempts`) and noted in human output.
+- Support multiple PubSub subscription types via `ws --subscription slot|logs`
+  (default `slot`, backward compatible), built on an extensible `Subscription`
+  type. `logsSubscribe` is now testable end to end.
+- Generalize the WebSocket "first notification" step so it passes for any
+  subscription (slot subscriptions also report the slot; log subscriptions do
+  not). Reconnect/retry paths never log the URL, preserving redaction.
 - Run `compare` endpoint checks **concurrently** instead of sequentially, so the
   total time is bounded by the slowest endpoint rather than their sum. Endpoint
   order and the first-error behavior are unchanged.

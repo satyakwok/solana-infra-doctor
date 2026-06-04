@@ -51,6 +51,10 @@ pub struct WsArgs {
     #[arg(long)]
     pub ws: Option<String>,
 
+    /// Which PubSub subscription to test.
+    #[arg(long, value_enum, default_value_t = crate::ws::subscription::Subscription::Slot)]
+    pub subscription: crate::ws::subscription::Subscription,
+
     /// Emit machine-readable JSON.
     #[arg(long)]
     pub json: bool,
