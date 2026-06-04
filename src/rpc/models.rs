@@ -74,6 +74,60 @@ pub struct BlockhashValidResponse {
     pub value: bool,
 }
 
+/// The result of `getAccountInfo`. `value` is `null` when the account does not
+/// exist, so it is modeled as `Option`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct AccountInfoResponse {
+    pub value: Option<AccountInfo>,
+}
+
+/// An account's fields from `getAccountInfo` (base64 encoding). Only the fields
+/// needed for program-readiness are modeled.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct AccountInfo {
+    /// The account's owner program (a loader, for an executable program).
+    pub owner: String,
+    /// Whether the account is an executable program.
+    pub executable: bool,
+    /// The account's data length in bytes, when the RPC reports it.
+    #[serde(default)]
+    pub space: Option<u64>,
+    /// The raw `[data, encoding]` pair, used as a fallback length source when
+    /// `space` is absent.
+    #[serde(default)]
+    pub data: Option<Value>,
+}
+
+impl AccountInfo {
+    /// The account's data length in bytes: `space` when present, otherwise
+    /// derived from the base64 `data` payload.
+    pub fn data_len(&self) -> u64 {
+        if let Some(space) = self.space {
+            return space;
+        }
+        match &self.data {
+            Some(Value::Array(parts)) => parts
+                .first()
+                .and_then(Value::as_str)
+                .map(base64_decoded_len)
+                .unwrap_or(0),
+            _ => 0,
+        }
+    }
+}
+
+/// Decoded byte length of a base64 string, computed without decoding it.
+fn base64_decoded_len(encoded: &str) -> u64 {
+    let len = encoded.len() as u64;
+    if len == 0 {
+        return 0;
+    }
+    let padding = encoded.bytes().rev().take_while(|&b| b == b'=').count() as u64;
+    // `saturating_sub` guards against a malformed payload (e.g. all-padding)
+    // where `padding` could exceed the byte estimate and underflow.
+    ((len / 4) * 3).saturating_sub(padding)
+}
+
 /// One entry from `getRecentPrioritizationFees`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct PrioritizationFee {

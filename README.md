@@ -18,6 +18,8 @@ pipelines, and infrastructure reviews.
 
 - Diagnoses core JSON-RPC methods, blockhash freshness, slot data, latency, and
   performance samples.
+- Checks SPL Token Program and Token-2022 readiness (whether the RPC serves the
+  token programs as executable accounts) via `getAccountInfo`.
 - Compares two or more endpoints and scores each `0`–`100`.
 - Tailors scoring to workload profiles: `general`, `wallet`, `bot`, `indexer`,
   `ci`.
@@ -178,6 +180,16 @@ automation, or operational runbooks.
 | Performance | `getRecentPerformanceSamples` | Confirms recent performance sample data is available. |
 | Performance | `getBlockTime` | Measures how far the latest finalized block time lags wall clock (a freshness signal used in scoring). |
 | Performance | `getRecentPrioritizationFees` | Surfaces the median recent priority fee as fee-market context (chain-wide, not a per-endpoint score signal). |
+| Token | `getAccountInfo` | Confirms the SPL Token Program account is served as an executable program. |
+| Token | `getAccountInfo` | Confirms the Token-2022 (Token Extensions) program account is served as an executable program. |
+
+`Token` checks confirm the endpoint serves the canonical token programs
+(`Tokenkeg…` and `TokenzQd…`) as executable accounts — the readiness most
+token-touching workloads (wallets, trading bots, token indexers) depend on. They
+are informational: a failure caps the verdict at `WARNING` rather than `BAD`, and
+profile scoring rewards token readiness for the `wallet`, `bot`, and `indexer`
+profiles. See [`examples/reports/token-readiness-report.md`](examples/reports/token-readiness-report.md)
+for a real comparison.
 
 The CLI measures latency for each method and calculates an average latency
 verdict using these thresholds:
@@ -574,8 +586,8 @@ deterministic heuristics, not a guarantee of provider behavior.
 - Compare checks currently run sequentially.
 - Scores are deterministic heuristics, not provider guarantees.
 - This is a local-first CLI, not a hosted monitoring service.
-- No Token Program, Token-2022, transaction simulation, or account indexing
-  checks yet.
+- Token readiness confirms the SPL Token and Token-2022 program accounts are
+  served; transaction simulation and account indexing checks are not covered yet.
 - No Solana SDK dependencies are used yet.
 - No Prometheus exporter, dashboard, hosted cloud service, marketplace, token,
   NFT, points, airdrop, or governance features.

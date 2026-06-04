@@ -8,10 +8,11 @@ use crate::{
     },
 };
 
-const CATEGORY_ORDER: [CheckCategory; 3] = [
+const CATEGORY_ORDER: [CheckCategory; 4] = [
     CheckCategory::Core,
     CheckCategory::Blockhash,
     CheckCategory::Performance,
+    CheckCategory::Token,
 ];
 
 /// Print the machine-readable JSON report to stdout.
@@ -109,6 +110,21 @@ pub fn render_human(report: &CheckReport, palette: Palette, verbose: bool) -> St
         result_rows.push(vec![
             Cell::styled("Fee market", palette.label("Fee market")),
             Cell::plain(format!("median {fee} micro-lamports/CU")),
+        ]);
+    }
+    if report
+        .checks
+        .iter()
+        .any(|check| check.category == CheckCategory::Token)
+    {
+        let ready = |ready: bool| if ready { "ready" } else { "not ready" };
+        result_rows.push(vec![
+            Cell::styled("Token", palette.label("Token")),
+            Cell::plain(format!(
+                "Token Program {} · Token-2022 {}",
+                ready(report.token_program_ready),
+                ready(report.token_2022_ready)
+            )),
         ]);
     }
     output.push_str(&table::render(&result_rows, 3));
@@ -255,6 +271,8 @@ mod tests {
             latency_samples: None,
             block_time_lag_secs: None,
             prioritization_fee_median: None,
+            token_program_ready: true,
+            token_2022_ready: true,
             fail_on_warning: true,
             checks: vec![
                 RpcCheck {

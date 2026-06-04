@@ -101,6 +101,10 @@ pub struct CompareEndpoint {
     /// Median recent prioritization fee (micro-lamports/CU). Chain-wide
     /// fee-market context — surfaced, but not a scoring discriminator.
     pub prioritization_fee_median: Option<u64>,
+    /// Whether the RPC serves the SPL Token Program as an executable program.
+    pub token_program_ready: bool,
+    /// Whether the RPC serves the Token-2022 program as an executable program.
+    pub token_2022_ready: bool,
     /// Names of the checks that failed.
     pub failed_checks: Vec<String>,
     /// Whether the latest blockhash validated.
@@ -250,6 +254,8 @@ fn build_endpoint(
         average_latency_ms: report.average_latency_ms,
         block_time_lag_secs: report.block_time_lag_secs,
         prioritization_fee_median: report.prioritization_fee_median,
+        token_program_ready: report.token_program_ready,
+        token_2022_ready: report.token_2022_ready,
         failed_checks,
         blockhash_valid,
         notes: Vec::new(),

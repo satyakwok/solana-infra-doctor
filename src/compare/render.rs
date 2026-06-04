@@ -120,6 +120,16 @@ fn render_endpoints_verbose(report: &CompareReport, palette: Palette, output: &m
             ),
             detail_row(
                 palette,
+                "Token Program",
+                format_readiness(endpoint.token_program_ready),
+            ),
+            detail_row(
+                palette,
+                "Token-2022",
+                format_readiness(endpoint.token_2022_ready),
+            ),
+            detail_row(
+                palette,
                 "Failed checks",
                 format_failed_checks(&endpoint.failed_checks),
             ),
@@ -206,6 +216,14 @@ fn format_priority_fee(fee: Option<u64>) -> String {
     )
 }
 
+fn format_readiness(ready: bool) -> String {
+    if ready {
+        "ready".to_string()
+    } else {
+        "not ready".to_string()
+    }
+}
+
 /// Serialize a compare report to pretty-printed JSON.
 pub fn render_json(report: &CompareReport) -> Result<String, AppError> {
     serde_json::to_string_pretty(report).map_err(AppError::SerializeReport)
@@ -279,6 +297,14 @@ pub fn render_markdown(report: &CompareReport) -> String {
         output.push_str(&format!(
             "- Median priority fee: {}\n",
             format_priority_fee(endpoint.prioritization_fee_median)
+        ));
+        output.push_str(&format!(
+            "- Token Program: {}\n",
+            format_readiness(endpoint.token_program_ready)
+        ));
+        output.push_str(&format!(
+            "- Token-2022: {}\n",
+            format_readiness(endpoint.token_2022_ready)
         ));
         output.push_str(&format!(
             "- Failed checks: {}\n",

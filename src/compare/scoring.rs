@@ -39,6 +39,22 @@ pub fn score_endpoint(profile: CompareProfile, endpoint: &CompareEndpoint) -> u8
         score += 15;
     }
 
+    // Token-program readiness — whether the RPC serves the SPL Token and
+    // Token-2022 program accounts, which token-touching workloads depend on. This
+    // is a bonus weighted by how much the profile cares about tokens; absence is
+    // neutral in the base so non-token workloads are not penalized for it.
+    let token_weight = match profile {
+        CompareProfile::General | CompareProfile::Ci => 0,
+        CompareProfile::Wallet | CompareProfile::Bot => 3,
+        CompareProfile::Indexer => 5,
+    };
+    if endpoint.token_program_ready {
+        score += token_weight;
+    }
+    if endpoint.token_2022_ready {
+        score += token_weight;
+    }
+
     score -= 5 * i32::try_from(endpoint.failed_checks.len()).unwrap_or(i32::MAX);
 
     match profile {
@@ -112,6 +128,12 @@ pub(crate) fn profile_notes(profile: CompareProfile, endpoint: &CompareEndpoint)
             if has_failed_core_check(endpoint) {
                 notes.push("One or more core RPC methods failed for wallet workloads.".to_string());
             }
+            if !endpoint.token_program_ready {
+                notes.push(
+                    "SPL Token Program account is unavailable; wallet SPL token flows are at risk."
+                        .to_string(),
+                );
+            }
         }
         CompareProfile::Bot => {
             if endpoint
@@ -125,10 +147,22 @@ pub(crate) fn profile_notes(profile: CompareProfile, endpoint: &CompareEndpoint)
             if endpoint.slot_lag.is_some_and(|lag| lag > 50) {
                 notes.push("Slot lag is high for slot-sensitive bot workloads.".to_string());
             }
+            if !endpoint.token_program_ready {
+                notes.push(
+                    "SPL Token Program account is unavailable for token-trading bot workloads."
+                        .to_string(),
+                );
+            }
         }
         CompareProfile::Indexer => {
             if endpoint.slot_lag.is_some_and(|lag| lag > 50) {
                 notes.push("Slot lag is high for indexer catch-up and freshness.".to_string());
+            }
+            if !endpoint.token_program_ready || !endpoint.token_2022_ready {
+                notes.push(
+                    "SPL Token or Token-2022 program account is unavailable; token account indexing may be incomplete."
+                        .to_string(),
+                );
             }
             if endpoint.block_time_lag_secs.is_some_and(|lag| lag > 45) {
                 notes.push(

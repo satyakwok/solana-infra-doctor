@@ -191,7 +191,21 @@ fn healthy_rpc_responses(slot: u64) -> Vec<MockResponse> {
         MockResponse::ok(
             r#"{"jsonrpc":"2.0","id":10,"result":[{"slot":1,"prioritizationFee":0},{"slot":2,"prioritizationFee":150}]}"#,
         ),
+        // Token Program / Token-2022 readiness (getAccountInfo).
+        MockResponse::ok(token_program_account_ok(11)),
+        MockResponse::ok(token_program_account_ok(12)),
     ]
+}
+
+/// A `getAccountInfo` response for an executable program account (an SPL Token or
+/// Token-2022 program), as used by the token readiness checks.
+fn token_program_account_ok(id: u64) -> &'static str {
+    Box::leak(
+        format!(
+            r#"{{"jsonrpc":"2.0","id":{id},"result":{{"context":{{"slot":1}},"value":{{"owner":"BPFLoaderUpgradeab1e11111111111111111111111","executable":true,"space":36,"lamports":1,"data":["","base64"]}}}}}}"#
+        )
+        .into_boxed_str(),
+    )
 }
 
 #[tokio::test]
@@ -209,6 +223,8 @@ async fn full_check_returns_good_for_healthy_rpc() {
         MockResponse::ok(
             r#"{"jsonrpc":"2.0","id":10,"result":[{"slot":1,"prioritizationFee":0}]}"#,
         ),
+        MockResponse::ok(token_program_account_ok(11)),
+        MockResponse::ok(token_program_account_ok(12)),
     ]);
     let expected_url = format!("{}/", server.url);
 
@@ -218,7 +234,9 @@ async fn full_check_returns_good_for_healthy_rpc() {
     assert_eq!(report.verdict, Verdict::Good);
     assert_eq!(report.rpc_url, expected_url);
     assert_eq!(report.summary, "All RPC readiness checks passed");
-    assert_eq!(report.checks.len(), 9);
+    assert_eq!(report.checks.len(), 11);
+    assert!(report.token_program_ready);
+    assert!(report.token_2022_ready);
     assert!(report.average_latency_ms.is_some());
     assert!(report
         .checks
@@ -455,6 +473,8 @@ fn verdict_latency_and_report_helpers_are_covered() {
         latency_samples: None,
         block_time_lag_secs: None,
         prioritization_fee_median: None,
+        token_program_ready: true,
+        token_2022_ready: true,
         fail_on_warning: true,
         checks: vec![success, failed],
     };
@@ -621,6 +641,8 @@ fn compare_check_report(
         latency_samples: None,
         block_time_lag_secs: None,
         prioritization_fee_median: None,
+        token_program_ready: false,
+        token_2022_ready: false,
         fail_on_warning: false,
         checks,
     }
@@ -743,6 +765,8 @@ fn compare_profiles_apply_expected_adjustments_and_notes() {
         average_latency_ms: Some(900),
         block_time_lag_secs: None,
         prioritization_fee_median: None,
+        token_program_ready: false,
+        token_2022_ready: false,
         failed_checks: vec!["getRecentPerformanceSamples".to_string()],
         blockhash_valid: false,
         notes: Vec::new(),
@@ -1886,6 +1910,8 @@ fn compare_recommendation_falls_back_when_best_index_has_no_endpoint() {
             average_latency_ms: Some(20),
             block_time_lag_secs: None,
             prioritization_fee_median: None,
+            token_program_ready: true,
+            token_2022_ready: true,
             failed_checks: Vec::new(),
             blockhash_valid: true,
             notes: Vec::new(),
@@ -2223,6 +2249,8 @@ async fn check_block_time_getslot_null_and_fees_empty() {
         MockResponse::ok(performance_ok()),
         MockResponse::ok(r#"{"jsonrpc":"2.0","id":8,"result":null}"#),
         MockResponse::ok(r#"{"jsonrpc":"2.0","id":10,"result":[]}"#),
+        MockResponse::ok(token_program_account_ok(11)),
+        MockResponse::ok(token_program_account_ok(12)),
     ];
     let server = MockRpcServer::start(responses);
     let report = run_check(args_for(server.url.clone())).await.unwrap();
@@ -2244,6 +2272,8 @@ async fn check_block_time_null_and_fees_null() {
         MockResponse::ok(r#"{"jsonrpc":"2.0","id":8,"result":100}"#),
         MockResponse::ok(r#"{"jsonrpc":"2.0","id":9,"result":null}"#),
         MockResponse::ok(r#"{"jsonrpc":"2.0","id":10,"result":null}"#),
+        MockResponse::ok(token_program_account_ok(11)),
+        MockResponse::ok(token_program_account_ok(12)),
     ];
     let server = MockRpcServer::start(responses);
     let report = run_check(args_for(server.url.clone())).await.unwrap();
@@ -2283,4 +2313,151 @@ fn compare_block_time_freshness_scoring_and_render() {
     assert!(verbose.contains("120s behind"));
     assert!(verbose.contains("Median priority fee"));
     assert!(verbose.contains("5000 micro-lamports/CU"));
+}
+
+#[test]
+fn account_info_data_len_variants() {
+    use solana_infra_doctor::rpc::{AccountInfo, AccountInfoResponse};
+
+    // `space` present is used directly.
+    let with_space: AccountInfoResponse = serde_json::from_str(
+        r#"{"value":{"owner":"BPFLoaderUpgradeab1e11111111111111111111111","executable":true,"space":36,"data":["","base64"]}}"#,
+    )
+    .unwrap();
+    let account = with_space.value.unwrap();
+    assert!(account.executable);
+    assert_eq!(account.data_len(), 36);
+
+    // No `space`: length is derived from the base64 data ("QUJD" -> "ABC" = 3).
+    let from_base64: AccountInfo =
+        serde_json::from_str(r#"{"owner":"x","executable":true,"data":["QUJD","base64"]}"#)
+            .unwrap();
+    assert_eq!(from_base64.data_len(), 3);
+
+    // Padded base64 ("QQ==" -> "A" = 1 byte) exercises the padding branch.
+    let padded: AccountInfo =
+        serde_json::from_str(r#"{"owner":"x","executable":true,"data":["QQ==","base64"]}"#)
+            .unwrap();
+    assert_eq!(padded.data_len(), 1);
+
+    // A malformed all-padding payload must not underflow; it saturates to zero.
+    let malformed: AccountInfo =
+        serde_json::from_str(r#"{"owner":"x","executable":true,"data":["==","base64"]}"#).unwrap();
+    assert_eq!(malformed.data_len(), 0);
+
+    // Absent data and a null account both yield zero / no account.
+    let no_data: AccountInfo = serde_json::from_str(r#"{"owner":"x","executable":false}"#).unwrap();
+    assert_eq!(no_data.data_len(), 0);
+    let missing: AccountInfoResponse = serde_json::from_str(r#"{"value":null}"#).unwrap();
+    assert!(missing.value.is_none());
+}
+
+#[tokio::test]
+async fn token_program_readiness_failure_paths() {
+    // Run 1: Token Program returns an RPC error (the missing-result branch) and
+    // Token-2022 returns a non-executable account (the not-a-program branch).
+    let mut responses = healthy_rpc_responses(347_000_000);
+    responses.truncate(10); // keep ids 1-10, supply our own token responses
+    responses.push(MockResponse::ok(
+        r#"{"jsonrpc":"2.0","id":11,"error":{"code":-32000,"message":"unavailable"}}"#,
+    ));
+    responses.push(MockResponse::ok(
+        r#"{"jsonrpc":"2.0","id":12,"result":{"context":{"slot":1},"value":{"owner":"SomeOwner1111111111111111111111111111111111","executable":false,"space":0,"data":["","base64"]}}}"#,
+    ));
+    let server = MockRpcServer::start(responses);
+    let report = run_check(args_for(server.url.clone())).await.unwrap();
+    server.join();
+
+    assert!(!report.token_program_ready);
+    assert!(!report.token_2022_ready);
+    // Token failures are informational: they cap the verdict at WARNING, not BAD.
+    assert_eq!(report.verdict, Verdict::Warning);
+    assert!(report
+        .checks
+        .iter()
+        .any(|check| check.category == CheckCategory::Token
+            && check.detail.contains("not an executable program")));
+
+    // Run 2: the Token Program account is missing (value: null); Token-2022 is ok.
+    let mut responses = healthy_rpc_responses(347_000_000);
+    responses.truncate(10);
+    responses.push(MockResponse::ok(
+        r#"{"jsonrpc":"2.0","id":11,"result":{"context":{"slot":1},"value":null}}"#,
+    ));
+    responses.push(MockResponse::ok(token_program_account_ok(12)));
+    let server = MockRpcServer::start(responses);
+    let report = run_check(args_for(server.url.clone())).await.unwrap();
+    server.join();
+
+    assert!(!report.token_program_ready);
+    assert!(report.token_2022_ready);
+    assert!(report
+        .checks
+        .iter()
+        .any(|check| check.detail.contains("account not found")));
+
+    // The single-check Result block surfaces the Token row (both readiness arms).
+    let human = render_human(&report, plain(), false);
+    assert!(human.contains("Token"));
+    assert!(human.contains("Token Program not ready"));
+    assert!(human.contains("Token-2022 ready"));
+}
+
+fn report_with_tokens(
+    url: &str,
+    token_program: bool,
+    token_2022: bool,
+) -> solana_infra_doctor::checks::CheckReport {
+    let mut report =
+        compare_check_report(url, Verdict::Good, Some(347_000_000), Some(50), true, &[]);
+    report.token_program_ready = token_program;
+    report.token_2022_ready = token_2022;
+    report
+}
+
+#[test]
+fn compare_token_readiness_scoring_notes_and_render() {
+    let ready = report_with_tokens("https://ready.example.com/", true, true);
+    let missing = report_with_tokens("https://missing.example.com/", false, false);
+    let report = build_compare_report(CompareProfile::Indexer, &[ready, missing]);
+
+    // Under a token-sensitive profile, serving the token programs scores higher.
+    assert!(report.endpoints[0].score > report.endpoints[1].score);
+    // The endpoint missing the programs is noted; the ready one is not.
+    assert!(report.endpoints[1]
+        .notes
+        .iter()
+        .any(|note| note.contains("Token-2022 program account is unavailable")));
+    assert!(!report.endpoints[0]
+        .notes
+        .iter()
+        .any(|note| note.contains("unavailable")));
+
+    // Verbose + Markdown surface both readiness arms.
+    let verbose = render_compare_human(&report, plain(), true);
+    assert!(verbose.contains("Token Program"));
+    assert!(verbose.contains("Token-2022"));
+    assert!(verbose.contains("not ready"));
+    let markdown = render_markdown(&report);
+    assert!(markdown.contains("- Token Program: ready"));
+    assert!(markdown.contains("- Token Program: not ready"));
+    assert!(markdown.contains("- Token-2022: not ready"));
+
+    // Wallet and bot profiles each note the missing SPL Token Program.
+    let wallet = build_compare_report(
+        CompareProfile::Wallet,
+        &[report_with_tokens("https://w.example.com/", false, false)],
+    );
+    assert!(wallet.endpoints[0]
+        .notes
+        .iter()
+        .any(|note| note.contains("wallet SPL token flows")));
+    let bot = build_compare_report(
+        CompareProfile::Bot,
+        &[report_with_tokens("https://b.example.com/", false, false)],
+    );
+    assert!(bot.endpoints[0]
+        .notes
+        .iter()
+        .any(|note| note.contains("token-trading bot")));
 }

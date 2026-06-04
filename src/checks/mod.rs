@@ -6,8 +6,9 @@ use crate::{
     error::AppError,
     latency::{average_latency_ms, Latency, LatencyStats},
     rpc::{
-        BlockhashValidResponse, JsonRpcRequest, JsonRpcResponse, LatestBlockhashResponse,
-        PerformanceSample, PrioritizationFee, RpcClient, RpcEndpoint, VersionInfo,
+        AccountInfoResponse, BlockhashValidResponse, JsonRpcRequest, JsonRpcResponse,
+        LatestBlockhashResponse, PerformanceSample, PrioritizationFee, RpcClient, RpcEndpoint,
+        VersionInfo,
     },
     verdict::Verdict,
 };
@@ -40,6 +41,11 @@ pub struct CheckReport {
     /// not an endpoint-quality signal. `None` if `getRecentPrioritizationFees`
     /// failed.
     pub prioritization_fee_median: Option<u64>,
+    /// Whether the SPL Token Program account is served as an executable program
+    /// (token transaction workloads depend on it).
+    pub token_program_ready: bool,
+    /// Whether the Token-2022 program account is served as an executable program.
+    pub token_2022_ready: bool,
     /// Whether `--fail-on-warning` was set (surfaced for CI context).
     pub fail_on_warning: bool,
     /// The individual per-method check results.
@@ -103,22 +109,25 @@ impl RpcCheck {
 }
 
 /// The diagnostic category a check belongs to. `Core` and `Blockhash` checks are
-/// critical to readiness; `Performance` checks are informational.
+/// critical to readiness; `Performance` and `Token` checks are informational.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckCategory {
     Core,
     Blockhash,
     Performance,
+    Token,
 }
 
 impl CheckCategory {
-    /// The human-readable category name (`Core`, `Blockhash`, `Performance`).
+    /// The human-readable category name (`Core`, `Blockhash`, `Performance`,
+    /// `Token`).
     pub fn label(self) -> &'static str {
         match self {
             Self::Core => "Core",
             Self::Blockhash => "Blockhash",
             Self::Performance => "Performance",
+            Self::Token => "Token",
         }
     }
 
@@ -176,6 +185,8 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
                 latency_samples: None,
                 block_time_lag_secs: None,
                 prioritization_fee_median: None,
+                token_program_ready: false,
+                token_2022_ready: false,
                 fail_on_warning: args.fail_on_warning,
                 checks: vec![RpcCheck::failed(
                     CheckCategory::Core,
@@ -212,6 +223,11 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
     let (fee_check, prioritization_fee_median) = check_prioritization_fees(&client).await;
     checks.push(fee_check);
 
+    let (token_program_check, token_program_ready) = check_token_program(&client).await;
+    checks.push(token_program_check);
+    let (token_2022_check, token_2022_ready) = check_token_2022(&client).await;
+    checks.push(token_2022_check);
+
     let average_latency_ms = average_latency_ms(
         checks
             .iter()
@@ -237,6 +253,8 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
         latency_samples,
         block_time_lag_secs,
         prioritization_fee_median,
+        token_program_ready,
+        token_2022_ready,
         fail_on_warning: args.fail_on_warning,
         checks,
     })
@@ -569,6 +587,99 @@ async fn check_prioritization_fees(client: &RpcClient) -> (RpcCheck, Option<u64>
     }
 }
 
+/// The canonical SPL Token Program account address.
+const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+/// The canonical Token-2022 (Token Extensions) program account address.
+const TOKEN_2022_PROGRAM_ID: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
+/// `getAccountInfo` on the SPL Token Program account: confirms the RPC serves the
+/// program as an executable account, which token transaction workloads need.
+async fn check_token_program(client: &RpcClient) -> (RpcCheck, bool) {
+    check_program_account(client, 11, "Token Program", TOKEN_PROGRAM_ID).await
+}
+
+/// `getAccountInfo` on the Token-2022 (Token Extensions) program account.
+async fn check_token_2022(client: &RpcClient) -> (RpcCheck, bool) {
+    check_program_account(client, 12, "Token-2022", TOKEN_2022_PROGRAM_ID).await
+}
+
+/// Shared `getAccountInfo` program-readiness probe: an account is "ready" when it
+/// exists, is `executable`, and reports a non-zero data length — i.e. the RPC
+/// returns the deployed program rather than a missing or non-program account.
+///
+/// This is an informational (non-critical) signal: an RPC that cannot serve the
+/// token programs is degraded for token-touching workloads, but it does not make
+/// the endpoint unusable for non-token traffic, so failures cap the verdict at
+/// `WARNING` rather than `BAD`.
+async fn check_program_account(
+    client: &RpcClient,
+    id: u64,
+    label: &'static str,
+    program_id: &str,
+) -> (RpcCheck, bool) {
+    const METHOD: &str = "getAccountInfo";
+    let params = vec![
+        Value::String(program_id.to_string()),
+        serde_json::json!({ "encoding": "base64" }),
+    ];
+
+    match call_rpc::<AccountInfoResponse>(client, id, METHOD, params).await {
+        Ok((response, latency)) => match response.result {
+            Some(account_info) => match account_info.value {
+                Some(account) => {
+                    let data_len = account.data_len();
+                    if account.executable && data_len > 0 {
+                        (
+                            RpcCheck::success(
+                                CheckCategory::Token,
+                                METHOD,
+                                latency,
+                                format!(
+                                    "{label} ready: executable {data_len}-byte program owned by {}",
+                                    account.owner
+                                ),
+                            ),
+                            true,
+                        )
+                    } else {
+                        (
+                            RpcCheck::failed(
+                                CheckCategory::Token,
+                                METHOD,
+                                Some(latency),
+                                format!(
+                                    "{label} account is not an executable program (executable={}, {data_len} bytes)",
+                                    account.executable
+                                ),
+                                ErrorKind::MalformedResponse,
+                            ),
+                            false,
+                        )
+                    }
+                }
+                None => (
+                    RpcCheck::failed(
+                        CheckCategory::Token,
+                        METHOD,
+                        Some(latency),
+                        format!("{label} account not found"),
+                        ErrorKind::MalformedResponse,
+                    ),
+                    false,
+                ),
+            },
+            None => (
+                failed_from_response(CheckCategory::Token, METHOD, Some(latency), &response),
+                false,
+            ),
+        },
+        Err(error) => (
+            failed_from_error(CheckCategory::Token, METHOD, error),
+            false,
+        ),
+    }
+}
+
 async fn call_rpc<T>(
     client: &RpcClient,
     id: u64,
@@ -772,6 +883,14 @@ mod tests {
     fn fees_ok() -> &'static str {
         r#"{"jsonrpc":"2.0","id":10,"result":[{"slot":1,"prioritizationFee":0},{"slot":2,"prioritizationFee":150}]}"#
     }
+    // Token Program / Token-2022 readiness: getAccountInfo returns an executable
+    // program account (space 36, owned by a BPF loader).
+    fn token_program_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":11,"result":{"context":{"slot":100},"value":{"owner":"BPFLoaderUpgradeab1e11111111111111111111111","executable":true,"space":36,"lamports":1,"data":["","base64"]}}}"#
+    }
+    fn token_2022_ok() -> &'static str {
+        r#"{"jsonrpc":"2.0","id":12,"result":{"context":{"slot":100},"value":{"owner":"BPFLoaderUpgradeab1e11111111111111111111111","executable":true,"space":36,"lamports":1,"data":["","base64"]}}}"#
+    }
 
     fn success(category: CheckCategory, method: &'static str, latency_ms: u128) -> RpcCheck {
         RpcCheck {
@@ -820,6 +939,8 @@ mod tests {
             finalized_slot_ok(),
             block_time_ok(),
             fees_ok(),
+            token_program_ok(),
+            token_2022_ok(),
         ]);
 
         let expected_url = format!("{}/", server.url);
@@ -829,8 +950,15 @@ mod tests {
         assert_eq!(report.verdict, Verdict::Good);
         assert_eq!(report.rpc_url, expected_url);
         assert_eq!(report.summary, "All RPC readiness checks passed");
-        assert_eq!(report.checks.len(), 9);
+        assert_eq!(report.checks.len(), 11);
         assert!(report.average_latency_ms.is_some());
+        assert!(report.token_program_ready);
+        assert!(report.token_2022_ready);
+        assert!(report
+            .checks
+            .iter()
+            .any(|check| check.category == CheckCategory::Token
+                && check.detail.contains("Token Program ready")));
         assert!(report
             .checks
             .iter()
@@ -849,6 +977,8 @@ mod tests {
             finalized_slot_ok(),
             block_time_ok(),
             fees_ok(),
+            token_program_ok(),
+            token_2022_ok(),
         ]);
 
         let report = run_check(args_for(server.url.clone())).await.unwrap();
@@ -880,6 +1010,8 @@ mod tests {
             finalized_slot_ok(),
             block_time_ok(),
             fees_ok(),
+            token_program_ok(),
+            token_2022_ok(),
         ]);
 
         let report = run_check(args_for(server.url.clone())).await.unwrap();
@@ -908,6 +1040,8 @@ mod tests {
             finalized_slot_ok(),
             block_time_ok(),
             fees_ok(),
+            token_program_ok(),
+            token_2022_ok(),
         ]);
 
         let report = run_check(args_for(server.url.clone())).await.unwrap();
