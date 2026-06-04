@@ -5,6 +5,10 @@
   </picture>
 </p>
 
+<p align="center">
+  <b>English</b> · <a href="./README.id.md">Bahasa Indonesia</a>
+</p>
+
 # Solana Infra Doctor
 
 [![CI](https://github.com/satyakwok/solana-infra-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/satyakwok/solana-infra-doctor/actions/workflows/ci.yml)
