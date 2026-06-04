@@ -11,6 +11,8 @@
 
 # Solana Infra Doctor
 
+[![crates.io](https://img.shields.io/crates/v/solana-infra-doctor.svg)](https://crates.io/crates/solana-infra-doctor)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Solana%20Infra%20Doctor-blue?logo=github)](https://github.com/marketplace/actions/solana-infra-doctor)
 [![CI](https://github.com/satyakwok/solana-infra-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/satyakwok/solana-infra-doctor/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/satyakwok/solana-infra-doctor/branch/main/graph/badge.svg)](https://codecov.io/gh/satyakwok/solana-infra-doctor)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
