@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 - 2026-06-04
 
 - Add **`sol-doctor grpc check`**: Yellowstone gRPC readiness diagnostics for
   backend workloads. The command validates and redacts the gRPC URL, connects
