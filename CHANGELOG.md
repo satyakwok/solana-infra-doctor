@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.13.0 - Unreleased
+## 0.13.0 - 2026-06-05
 
 - Add **`sol-doctor compare --data`**: run the data-readiness checks across every
   endpoint and let the **`indexer` profile score them** — `getProgramAccounts`
