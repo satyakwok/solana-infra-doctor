@@ -179,16 +179,13 @@ pub fn build_grpc_compare_report(
     // the same Solana network (documented in the README).
     let highest_slot = reports.iter().filter_map(|report| report.latest_slot).max();
 
-    let mut endpoints: Vec<_> = reports
+    // `build_endpoint` already scores and annotates each endpoint for the
+    // profile, so no second pass is needed before ranking.
+    let endpoints: Vec<_> = reports
         .iter()
         .enumerate()
         .map(|(position, report)| build_endpoint(position + 1, profile, highest_slot, report))
         .collect();
-
-    for endpoint in &mut endpoints {
-        endpoint.score = score_endpoint(profile, endpoint);
-        endpoint.notes = profile_notes(profile, endpoint);
-    }
 
     let best_endpoint_index = endpoints
         .iter()
