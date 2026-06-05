@@ -54,6 +54,23 @@ To run `grpc check` against a real endpoint, supply the `x-token` via an
 environment variable (never on the command line); see the
 [README](../README.md#yellowstone-grpc-readiness).
 
+## `grpc compare` — ranking gRPC endpoints (output structure)
+
+`sol-doctor grpc compare --grpc … --grpc … --profile latency`
+
+For the same reason as `grpc check`, a *successful* `grpc compare` cannot be
+shown publicly — ranking real endpoints needs private `x-token`s. This capture
+uses non-resolving placeholder hosts to show the **output structure**: the
+per-endpoint table (verdict, score, connect, time-to-first-event, slot lag), the
+ranking, and the recommendation. Both endpoints are unreachable here, so both
+score `0`; with real endpoints the table is populated and ranked:
+
+![sol-doctor grpc compare](images/cli/terminal/grpc-compare.png)
+
+Pair each endpoint's token by position with `--x-token-env` (read only from the
+environment, never printed); see the
+[README](../README.md#yellowstone-grpc-comparison).
+
 ## How these were generated
 
 Refreshed **manually** (never in CI), the same way as the text examples: build

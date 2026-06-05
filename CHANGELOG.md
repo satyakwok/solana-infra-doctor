@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.0 - Unreleased
+## 0.12.0 - 2026-06-05
 
 - Add **`sol-doctor grpc compare`**: rank multiple Yellowstone gRPC endpoints for
   a workload profile. It reuses the single-endpoint `grpc check` probe (safe by
