@@ -9,8 +9,8 @@ GOOD   WebSocket readiness checks passed
 
 Checks
 Check                 Status    Detail
-Connect               PASS      106 ms
+Connect               PASS      59 ms
 Subscribe             PASS      slotSubscribe · id 1
-First notification    PASS      332 ms · slot 424282488
+First notification    PASS      271 ms · slot 424471479
 Unsubscribe           PASS
 Close                 PASS

@@ -7,10 +7,10 @@ URL                   https://api.mainnet-beta.solana.com/
 Genesis               5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
 Verdict               GOOD
 Score                 99/100
-Slot                  424282690
+Slot                  424471346
 Slot lag              32 slots behind
-Average latency       18 ms
-Block time lag        15s behind
+Average latency       5 ms
+Block time lag        14s behind
 Median priority fee   0 micro-lamports/CU
 Token Program         ready
 Token-2022            ready
@@ -22,10 +22,10 @@ URL                   https://solana-rpc.publicnode.com/
 Genesis               5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
 Verdict               GOOD
 Score                 100/100
-Slot                  424282722
+Slot                  424471378
 Slot lag              baseline
-Average latency       95 ms
-Block time lag        2s behind
+Average latency       112 ms
+Block time lag        1s behind
 Median priority fee   0 micro-lamports/CU
 Token Program         ready
 Token-2022            ready

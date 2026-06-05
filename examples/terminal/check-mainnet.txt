@@ -5,29 +5,29 @@ RPC URL   https://api.mainnet-beta.solana.com/
 
 Result
 GOOD         All RPC readiness checks passed
-Latency      18 ms average
+Latency      3 ms average
 Checks       11 passed · 0 failed
-Block time   16s behind (finalized)
+Block time   14s behind (finalized)
 Fee market   median 0 micro-lamports/CU
 Token        Token Program ready · Token-2022 ready
 
 Checks
 
 Core
-- getHealth       PASS  35 ms  health is ok
-- getVersion      PASS  9 ms   solana-core 4.0.0
-- getGenesisHash  PASS  24 ms  5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
-- getSlot         PASS  5 ms   slot 424282448
+- getHealth       PASS  12 ms  health is ok
+- getVersion      PASS  2 ms   solana-core 4.0.0
+- getGenesisHash  PASS  3 ms   5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+- getSlot         PASS  2 ms   slot 424471333
 
 Blockhash
-- getLatestBlockhash  PASS  2 ms  FzsSsc1FBjsERVk6ZqJpqtCKSBLG7GywRFFNb2yBmLAz
-- isBlockhashValid    PASS  5 ms  latest blockhash is valid
+- getLatestBlockhash  PASS  3 ms  D7Er2EdpYw3yNM3ezTv6mbCDFMidF6idv3f11b4NJUW7
+- isBlockhashValid    PASS  3 ms  latest blockhash is valid
 
 Performance
-- getRecentPerformanceSamples  PASS  67 ms  214347 transactions across 152 slots in 60s
-- getBlockTime                 PASS  21 ms  finalized block time 16s behind wall clock
-- getRecentPrioritizationFees  PASS  11 ms  median priority fee 0 micro-lamports/CU (max 0)
+- getRecentPerformanceSamples  PASS  6 ms  247866 transactions across 148 slots in 60s
+- getBlockTime                 PASS  3 ms  finalized block time 14s behind wall clock
+- getRecentPrioritizationFees  PASS  4 ms  median priority fee 0 micro-lamports/CU (max 0)
 
 Token
-- getAccountInfo  PASS  8 ms   Token Program ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
-- getAccountInfo  PASS  19 ms  Token-2022 ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
+- getAccountInfo  PASS  3 ms  Token Program ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
+- getAccountInfo  PASS  2 ms  Token-2022 ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
