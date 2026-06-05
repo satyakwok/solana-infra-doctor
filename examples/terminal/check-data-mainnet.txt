@@ -1,0 +1,46 @@
+# sol-doctor real-run evidence
+# command:   ./target/release/sol-doctor check --rpc https://api.mainnet-beta.solana.com --data --verbose --color never
+# endpoint:  api.mainnet-beta.solana.com (public mainnet, --data)
+# version:   sol-doctor 0.13.0 (commit b3f771f)
+# captured:  2026-06-05T20:32:24Z (UTC)
+# redaction: URLs/credentials are redacted by the CLI; public endpoint, no credentials used.
+# ----------------------------------------------------------------------
+Solana Infra Doctor · RPC Readiness
+
+Target
+RPC URL   https://api.mainnet-beta.solana.com/
+
+Result
+GOOD         All RPC readiness checks passed
+Latency      5 ms average
+Checks       13 passed · 0 failed
+Block time   14s behind (finalized)
+Fee market   median 0 micro-lamports/CU
+Token        Token Program ready · Token-2022 ready
+Data         getProgramAccounts ready · history full (from genesis)
+
+Checks
+
+Core
+- getHealth       PASS  14 ms  health is ok
+- getVersion      PASS  2 ms   solana-core 4.0.0
+- getGenesisHash  PASS  15 ms  5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+- getSlot         PASS  2 ms   slot 424533096
+
+Blockhash
+- getLatestBlockhash  PASS  3 ms  RR7om347HpTNhSHruJh4B27r85WsE4Va5MNeBxQoJTE
+- isBlockhashValid    PASS  2 ms  latest blockhash is valid
+
+Performance
+- getRecentPerformanceSamples  PASS  6 ms  235659 transactions across 150 slots in 60s
+- getBlockTime                 PASS  6 ms  finalized block time 14s behind wall clock
+- getRecentPrioritizationFees  PASS  4 ms  median priority fee 0 micro-lamports/CU (max 0)
+
+Token
+- getAccountInfo  PASS  3 ms  Token Program ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
+- getAccountInfo  PASS  3 ms  Token-2022 ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
+
+Data
+- getProgramAccounts      PASS  2 ms    getProgramAccounts enabled (probed on ComputeBudget111111111111111111111111111111, 0 matched)
+- getFirstAvailableBlock  PASS  204 ms  history from genesis (full archival)
+# exit: 0

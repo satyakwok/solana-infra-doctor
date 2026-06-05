@@ -1,0 +1,41 @@
+# sol-doctor real-run evidence
+# command:   ./target/release/sol-doctor check --rpc https://api.devnet.solana.com --verbose --color never
+# endpoint:  api.devnet.solana.com (public devnet HTTP RPC)
+# version:   sol-doctor 0.13.0 (commit b3f771f)
+# captured:  2026-06-05T20:32:22Z (UTC)
+# redaction: URLs/credentials are redacted by the CLI; public endpoint, no credentials used.
+# ----------------------------------------------------------------------
+Solana Infra Doctor · RPC Readiness
+
+Target
+RPC URL   https://api.devnet.solana.com/
+
+Result
+GOOD         All RPC readiness checks passed
+Latency      3 ms average
+Checks       11 passed · 0 failed
+Block time   14s behind (finalized)
+Fee market   median 0 micro-lamports/CU
+Token        Token Program ready · Token-2022 ready
+
+Checks
+
+Core
+- getHealth       PASS  12 ms  health is ok
+- getVersion      PASS  2 ms   solana-core 4.0.0-rc.0
+- getGenesisHash  PASS  2 ms   EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG
+- getSlot         PASS  2 ms   slot 467398439
+
+Blockhash
+- getLatestBlockhash  PASS  2 ms  FchrcaYJEyZFEbq9sUXT3oafGNT23Znw16EDnRzSHJmo
+- isBlockhashValid    PASS  2 ms  latest blockhash is valid
+
+Performance
+- getRecentPerformanceSamples  PASS  7 ms  5411 transactions across 158 slots in 60s
+- getBlockTime                 PASS  2 ms  finalized block time 14s behind wall clock
+- getRecentPrioritizationFees  PASS  3 ms  median priority fee 0 micro-lamports/CU (max 0)
+
+Token
+- getAccountInfo  PASS  3 ms  Token Program ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
+- getAccountInfo  PASS  2 ms  Token-2022 ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
+# exit: 0

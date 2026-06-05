@@ -1,0 +1,52 @@
+# sol-doctor real-run evidence
+# command:   ./target/release/sol-doctor compare --rpc https://api.mainnet-beta.solana.com --rpc https://solana-rpc.publicnode.com --profile indexer --data --verbose --color never
+# endpoint:  api.mainnet-beta.solana.com + solana-rpc.publicnode.com (public, --data indexer)
+# version:   sol-doctor 0.13.0 (commit b3f771f)
+# captured:  2026-06-05T20:34:29Z (UTC)
+# redaction: public endpoints, no credentials. Public RPCs may rate-limit rapid repeated probes; any degraded result here is a real public-endpoint condition, not a tool error.
+# ----------------------------------------------------------------------
+Solana Infra Doctor · RPC Comparison
+
+Profile: indexer
+
+RPC #1
+URL                   https://api.mainnet-beta.solana.com/
+Genesis               5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+Verdict               GOOD
+Score                 100/100
+Slot                  424533407
+Slot lag              32 slots behind
+Average latency       7 ms
+Block time lag        14s behind
+Median priority fee   0 micro-lamports/CU
+Token Program         ready
+Token-2022            ready
+Failed checks         none
+Blockhash valid       yes
+getProgramAccounts    ready
+Archival              full (from genesis)
+
+RPC #2
+URL                   https://solana-rpc.publicnode.com/
+Genesis               5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+Verdict               GOOD
+Score                 100/100
+Slot                  424533439
+Slot lag              baseline
+Average latency       149 ms
+Block time lag        1s behind
+Median priority fee   0 micro-lamports/CU
+Token Program         ready
+Token-2022            ready
+Failed checks         none
+Blockhash valid       yes
+getProgramAccounts    ready
+Archival              from slot 423937381
+Notes
+- Endpoint serves only recent history (not full archival); deep backfill may be limited.
+
+Recommendation
+Best RPC: #1 · api.mainnet-beta.solana.com
+RPC #1 is recommended for indexer workloads.
+Avoid RPC #2 for freshness-sensitive indexer workloads.
+# exit: 0

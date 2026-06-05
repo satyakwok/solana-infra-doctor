@@ -869,6 +869,26 @@ These reports are useful as a readiness signal for RPC comparison, bot/indexer
 readiness review, CI discussion, and consulting-style diagnostics. Scores are
 deterministic heuristics, not a guarantee of provider behavior.
 
+## Real-run evidence
+
+Every documented feature was executed against a **real** endpoint, or is
+explicitly marked **blocked** because it needs private credentials. No output here
+is mocked or fabricated. Full matrix, exact commands, and timestamps:
+[`docs/audit/real-run-matrix.md`](docs/audit/real-run-matrix.md).
+
+| Feature | Real public run | Evidence |
+| --- | --- | --- |
+| HTTP `check` (+ `--data`, `--json`, `--samples`) | ✅ | [`examples/terminal/`](examples/terminal/) (`check-mainnet`, `check-devnet`, `check-data-mainnet`, `check-json-mainnet`, `check-samples-mainnet`) |
+| HTTP `compare` (+ `--data`, `--report`) | ✅ | [`compare-mainnet-publicnode.txt`](examples/terminal/compare-mainnet-publicnode.txt), [`compare-data-indexer.txt`](examples/terminal/compare-data-indexer.txt), [report](examples/reports/compare-indexer-data-live.md) |
+| WebSocket `ws` (slot + logs) | ✅ | [`ws-mainnet.txt`](examples/terminal/ws-mainnet.txt), [`ws-logs-mainnet.txt`](examples/terminal/ws-logs-mainnet.txt) |
+| GitHub Action `@v1` | ✅ (CI) | [`action-selftest.yml`](.github/workflows/action-selftest.yml) |
+| Yellowstone `grpc check` / `grpc compare` | ⛔ Blocked | [blocked: private credentials required](examples/terminal/grpc-check-blocked-private-endpoint-required.txt) |
+
+**All public-endpoint features have successful real-run evidence. Yellowstone
+gRPC is implemented but blocked from a public real run because every provider
+requires a private `x-token`** — run it with your own endpoint and token (see the
+evidence note above).
+
 ## Exit Codes
 
 | Code | Verdict | Meaning |

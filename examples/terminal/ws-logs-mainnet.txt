@@ -1,9 +1,9 @@
 # sol-doctor real-run evidence
-# command:   ./target/release/sol-doctor ws --rpc https://api.mainnet-beta.solana.com --verbose --color never
-# endpoint:  wss://api.mainnet-beta.solana.com (public mainnet WS)
+# command:   ./target/release/sol-doctor ws --rpc https://api.mainnet-beta.solana.com --subscription logs --verbose --color never
+# endpoint:  wss://api.mainnet-beta.solana.com (public, logsSubscribe)
 # version:   sol-doctor 0.13.0 (commit b3f771f)
-# captured:  2026-06-05T20:32:38Z (UTC)
-# redaction: URLs/credentials are redacted by the CLI; public endpoint, no credentials used.
+# captured:  2026-06-05T20:35:20Z (UTC)
+# redaction: public endpoint, no credentials used.
 # ----------------------------------------------------------------------
 Solana Infra Doctor · WebSocket Readiness
 
@@ -17,8 +17,8 @@ GOOD   WebSocket readiness checks passed
 Checks
 Check                 Status    Detail
 Connect               PASS      55 ms
-Subscribe             PASS      slotSubscribe · id 1
-First notification    PASS      192 ms · slot 424533165
+Subscribe             PASS      logsSubscribe · id 1
+First notification    PASS      332 ms
 Unsubscribe           PASS
 Close                 PASS
 # exit: 0

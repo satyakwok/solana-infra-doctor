@@ -1,0 +1,26 @@
+# sol-doctor Yellowstone gRPC — BLOCKED_PRIVATE_CREDENTIALS_REQUIRED
+# version:   sol-doctor 0.13.0 (commit b3f771f)
+# captured:  2026-06-05T20:34:36Z (UTC)
+#
+# Yellowstone gRPC support is implemented (grpc check, grpc compare), but a
+# successful public real run is NOT included: production Yellowstone endpoints
+# (Helius, Triton, QuickNode, Shyft, dRPC, ...) require a private x-token, and
+# there is no stable public no-token Yellowstone endpoint. This was verified:
+# pointing grpc check at a placeholder host returns a real transport error, and
+# pointing it at a provider host without a token returns auth-required — neither
+# is a healthy example. The command is documented with redaction-safe usage and
+# is BLOCKED until a real credentialed endpoint is supplied.
+#
+# Run it yourself with your own endpoint + token (token read ONLY from an env
+# var, never the command line, never printed/serialized/logged):
+#
+#   export YELLOWSTONE_X_TOKEN="your-token"
+#   sol-doctor grpc check --grpc https://your-yellowstone-endpoint \
+#     --x-token-env YELLOWSTONE_X_TOKEN
+#
+#   sol-doctor grpc compare \
+#     --grpc https://endpoint-a --x-token-env YELLOWSTONE_A_TOKEN \
+#     --grpc https://endpoint-b --x-token-env YELLOWSTONE_B_TOKEN \
+#     --profile latency
+#
+# Status: BLOCKED_PRIVATE_CREDENTIALS_REQUIRED (implemented, not faked).

@@ -1,3 +1,10 @@
+# sol-doctor real-run evidence
+# command:   ./target/release/sol-doctor check --rpc https://api.mainnet-beta.solana.com --verbose --color never
+# endpoint:  api.mainnet-beta.solana.com (public mainnet HTTP RPC)
+# version:   sol-doctor 0.13.0 (commit b3f771f)
+# captured:  2026-06-05T20:32:19Z (UTC)
+# redaction: URLs/credentials are redacted by the CLI; public endpoint, no credentials used.
+# ----------------------------------------------------------------------
 Solana Infra Doctor · RPC Readiness
 
 Target
@@ -5,29 +12,30 @@ RPC URL   https://api.mainnet-beta.solana.com/
 
 Result
 GOOD         All RPC readiness checks passed
-Latency      3 ms average
+Latency      8 ms average
 Checks       11 passed · 0 failed
-Block time   14s behind (finalized)
+Block time   15s behind (finalized)
 Fee market   median 0 micro-lamports/CU
 Token        Token Program ready · Token-2022 ready
 
 Checks
 
 Core
-- getHealth       PASS  12 ms  health is ok
+- getHealth       PASS  41 ms  health is ok
 - getVersion      PASS  2 ms   solana-core 4.0.0
-- getGenesisHash  PASS  3 ms   5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
-- getSlot         PASS  2 ms   slot 424471333
+- getGenesisHash  PASS  2 ms   5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+- getSlot         PASS  8 ms   slot 424533085
 
 Blockhash
-- getLatestBlockhash  PASS  3 ms  D7Er2EdpYw3yNM3ezTv6mbCDFMidF6idv3f11b4NJUW7
+- getLatestBlockhash  PASS  4 ms  8SY7d5cXdgeg7qLed5sdpCrs65fHg4Us2hcPL9cvhnss
 - isBlockhashValid    PASS  3 ms  latest blockhash is valid
 
 Performance
-- getRecentPerformanceSamples  PASS  6 ms  247866 transactions across 148 slots in 60s
-- getBlockTime                 PASS  3 ms  finalized block time 14s behind wall clock
-- getRecentPrioritizationFees  PASS  4 ms  median priority fee 0 micro-lamports/CU (max 0)
+- getRecentPerformanceSamples  PASS  6 ms  235659 transactions across 150 slots in 60s
+- getBlockTime                 PASS  6 ms  finalized block time 15s behind wall clock
+- getRecentPrioritizationFees  PASS  6 ms  median priority fee 0 micro-lamports/CU (max 0)
 
 Token
-- getAccountInfo  PASS  3 ms  Token Program ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
-- getAccountInfo  PASS  2 ms  Token-2022 ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
+- getAccountInfo  PASS  7 ms  Token Program ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
+- getAccountInfo  PASS  8 ms  Token-2022 ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111
+# exit: 0

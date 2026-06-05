@@ -1,0 +1,46 @@
+# sol-doctor real-run evidence
+# command:   ./target/release/sol-doctor compare --rpc https://api.mainnet-beta.solana.com --rpc https://solana-rpc.publicnode.com --profile bot --verbose --color never
+# endpoint:  api.mainnet-beta.solana.com + solana-rpc.publicnode.com (public)
+# version:   sol-doctor 0.13.0 (commit b3f771f)
+# captured:  2026-06-05T20:32:26Z (UTC)
+# redaction: URLs/credentials are redacted by the CLI; public endpoint, no credentials used.
+# ----------------------------------------------------------------------
+Solana Infra Doctor · RPC Comparison
+
+Profile: bot
+
+RPC #1
+URL                   https://api.mainnet-beta.solana.com/
+Genesis               5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+Verdict               GOOD
+Score                 99/100
+Slot                  424533101
+Slot lag              32 slots behind
+Average latency       5 ms
+Block time lag        14s behind
+Median priority fee   0 micro-lamports/CU
+Token Program         ready
+Token-2022            ready
+Failed checks         none
+Blockhash valid       yes
+
+RPC #2
+URL                   https://solana-rpc.publicnode.com/
+Genesis               5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+Verdict               GOOD
+Score                 100/100
+Slot                  424533133
+Slot lag              baseline
+Average latency       94 ms
+Block time lag        2s behind
+Median priority fee   0 micro-lamports/CU
+Token Program         ready
+Token-2022            ready
+Failed checks         none
+Blockhash valid       yes
+
+Recommendation
+Best RPC: #2 · solana-rpc.publicnode.com
+RPC #2 is recommended for bot workloads.
+RPC #1 has lower latency, but RPC #2 is fresher. For bot workloads, slot freshness may matter more than raw HTTP latency.
+# exit: 0

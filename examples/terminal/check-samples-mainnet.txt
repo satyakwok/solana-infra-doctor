@@ -1,0 +1,30 @@
+# sol-doctor real-run evidence
+# command:   ./target/release/sol-doctor check --rpc https://api.mainnet-beta.solana.com --samples 10 --color never
+# endpoint:  api.mainnet-beta.solana.com (public, --samples 10)
+# version:   sol-doctor 0.13.0 (commit b3f771f)
+# captured:  2026-06-05T20:35:17Z (UTC)
+# redaction: public endpoint, no credentials used.
+# ----------------------------------------------------------------------
+Solana Infra Doctor · RPC Readiness
+
+Target
+Endpoint   api.mainnet-beta.solana.com
+
+Result
+GOOD         All RPC readiness checks passed
+Latency      4 ms average
+Checks       11 passed · 0 failed
+Samples      p50 2 ms · p95 3 ms (10 runs)
+Block time   16s behind (finalized)
+Fee market   median 0 micro-lamports/CU
+Token        Token Program ready · Token-2022 ready
+
+Checks
+Category       Status    Summary
+Core           PASS      4 / 4
+Blockhash      PASS      2 / 2
+Performance    PASS      3 / 3
+Token          PASS      2 / 2
+
+Tip: run with --verbose to see full details.
+# exit: 0

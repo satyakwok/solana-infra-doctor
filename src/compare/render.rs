@@ -367,7 +367,9 @@ pub fn render_markdown(report: &CompareReport) -> String {
     output.push_str(
         "- Compare uses HTTP JSON-RPC diagnostics; run `sol-doctor ws` for WebSocket readiness.\n",
     );
-    output.push_str("- Checks run sequentially for deterministic v0.1 behavior.\n");
+    output.push_str(
+        "- Endpoints are checked concurrently; the run is bounded by the slowest endpoint.\n",
+    );
     output.push_str("- Scores are deterministic heuristics, not a provider guarantee.\n\n");
     output.push_str("## Disclaimer\n\n");
     output.push_str(

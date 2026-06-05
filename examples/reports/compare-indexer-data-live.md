@@ -1,6 +1,6 @@
 # Solana Infra Doctor RPC Compare Report
 
-Profile: `wallet`
+Profile: `indexer`
 
 ## Summary
 
@@ -11,8 +11,8 @@ Profile: `wallet`
 
 | RPC | URL | Verdict | Score | Slot | Slot lag | Average latency | Failed checks | Blockhash valid |
 | --- | --- | --- | ---: | --- | --- | --- | --- | --- |
-| RPC #1 | `https://api.mainnet-beta.solana.com/` | `GOOD` | 100/100 | 424206924 | 32 slots behind | 9ms | none | yes |
-| RPC #2 | `https://solana-rpc.publicnode.com/` | `GOOD` | 100/100 | 424206956 | baseline | 128ms | none | yes |
+| RPC #1 | `https://api.mainnet-beta.solana.com/` | `GOOD` | 100/100 | 424533921 | 30 slots behind | 4ms | none | yes |
+| RPC #2 | `https://solana-rpc.publicnode.com/` | `GOOD` | 100/100 | 424533951 | baseline | 94ms | none | yes |
 
 ## Per-Endpoint Details
 
@@ -22,13 +22,15 @@ Profile: `wallet`
 - Genesis: `5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d`
 - Verdict: `GOOD`
 - Score: 100/100
-- Slot: 424206924
-- Slot lag: 32 slots behind
-- Average latency: 9ms
+- Slot: 424533921
+- Slot lag: 30 slots behind
+- Average latency: 4ms
 - Block time lag: 14s behind
 - Median priority fee: 0 micro-lamports/CU
 - Token Program: ready
 - Token-2022: ready
+- getProgramAccounts: ready
+- Archival: full (from genesis)
 - Failed checks: none
 - Notes: none
 
@@ -38,15 +40,18 @@ Profile: `wallet`
 - Genesis: `5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d`
 - Verdict: `GOOD`
 - Score: 100/100
-- Slot: 424206956
+- Slot: 424533951
 - Slot lag: baseline
-- Average latency: 128ms
+- Average latency: 94ms
 - Block time lag: 2s behind
 - Median priority fee: 0 micro-lamports/CU
 - Token Program: ready
 - Token-2022: ready
+- getProgramAccounts: ready
+- Archival: from slot 423938034
 - Failed checks: none
-- Notes: none
+- Notes:
+  - Endpoint serves only recent history (not full archival); deep backfill may be limited.
 
 ## Recommendation
 
@@ -54,9 +59,9 @@ Best RPC: RPC #1
 
 Worst RPC: RPC #2
 
-RPC #1 is recommended for wallet workloads.
+RPC #1 is recommended for indexer workloads.
 
-Avoid RPC #2 for wallet transaction flows if blockhash or core checks failed.
+Avoid RPC #2 for freshness-sensitive indexer workloads.
 
 ## Limitations
 
