@@ -1321,9 +1321,9 @@ checksum = "a8132b682c6560b8f39dc5ef0eebffe0ea9748adbf8ebcb53b0a9a09c3be4a12"
 
 [[package]]
 name = "reliakit-ratelimit"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9ee2d7152b488417bb6d8a39daaac4769833857b95d085231964dce1ccad4d1"
+checksum = "5f0a8e556d2fc2c406acca0da7293431b07c892eeb0ad1af36ee7b9e70db5f98"
 
 [[package]]
 name = "reqwest"
