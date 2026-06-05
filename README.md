@@ -51,6 +51,12 @@ via `tokio-tungstenite`, and Yellowstone gRPC via `tonic` with the official
 
 ## CLI Preview
 
+<p align="center">
+  <img alt="sol-doctor check terminal output" src="https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/images/cli/terminal/check.png" width="760" />
+</p>
+
+<p align="center"><sub>A real <code>sol-doctor check</code> run against a public mainnet endpoint. More: <a href="docs/terminal-screenshots.md">terminal screenshots</a>.</sub></p>
+
 Compare two endpoints for a workload (`sol-doctor compare --profile bot`) — the
 faster endpoint is not automatically the winner when it serves staler slots:
 

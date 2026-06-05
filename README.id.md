@@ -52,6 +52,12 @@ definisi resmi `yellowstone-grpc-proto` (tanpa SDK Solana/Agave lengkap).
 
 ## Pratinjau CLI
 
+<p align="center">
+  <img alt="output terminal sol-doctor check" src="https://raw.githubusercontent.com/satyakwok/solana-infra-doctor/main/docs/images/cli/terminal/check.png" width="760" />
+</p>
+
+<p align="center"><sub>Run <code>sol-doctor check</code> asli ke endpoint mainnet publik. Selengkapnya: <a href="docs/terminal-screenshots.md">terminal screenshots</a>.</sub></p>
+
 Bandingkan dua endpoint untuk sebuah workload (`sol-doctor compare --profile bot`)
 — endpoint yang lebih cepat tidak otomatis menang kalau slot yang disajikannya
 lebih basi:
