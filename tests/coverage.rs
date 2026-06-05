@@ -677,6 +677,8 @@ async fn compare_rejects_fewer_than_two_rpc_urls() {
         profile: CompareProfile::General,
         json: false,
         report: None,
+        data: false,
+        data_program: None,
         timeout_ms: 1_000,
     })
     .await
@@ -697,6 +699,8 @@ async fn compare_success_reuses_check_flow_and_redacts_urls() {
         profile: CompareProfile::General,
         json: false,
         report: None,
+        data: false,
+        data_program: None,
         timeout_ms: 1_000,
     })
     .await
@@ -775,6 +779,9 @@ fn compare_profiles_apply_expected_adjustments_and_notes() {
         prioritization_fee_median: None,
         token_program_ready: false,
         token_2022_ready: false,
+        program_accounts: None,
+        oldest_available_slot: None,
+        archival_depth_slots: None,
         failed_checks: vec!["getRecentPerformanceSamples".to_string()],
         blockhash_valid: false,
         notes: Vec::new(),
@@ -1922,6 +1929,9 @@ fn compare_recommendation_falls_back_when_best_index_has_no_endpoint() {
             prioritization_fee_median: None,
             token_program_ready: true,
             token_2022_ready: true,
+            program_accounts: None,
+            oldest_available_slot: None,
+            archival_depth_slots: None,
             failed_checks: Vec::new(),
             blockhash_valid: true,
             notes: Vec::new(),
@@ -2647,4 +2657,153 @@ async fn data_probe_transport_failure_is_degraded() {
     // Rendering the degraded readiness with no archival slot covers those branches.
     let concise = render_human(&report, plain(), false);
     assert!(concise.contains("getProgramAccounts degraded"));
+}
+
+// --- compare --data: indexer profile scores data-readiness ---
+
+#[test]
+fn indexer_profile_scores_and_flags_data_readiness() {
+    use solana_infra_doctor::checks::ProgramAccountsReadiness;
+    fn ep(readiness: Option<ProgramAccountsReadiness>, oldest: Option<u64>) -> CompareEndpoint {
+        CompareEndpoint {
+            index: 1,
+            url: "https://e.example.com/".to_string(),
+            genesis_hash: None,
+            verdict: Verdict::Good,
+            score: 0,
+            slot: Some(100),
+            slot_lag: Some(0),
+            average_latency_ms: Some(900),
+            block_time_lag_secs: Some(10),
+            prioritization_fee_median: None,
+            token_program_ready: true,
+            token_2022_ready: true,
+            program_accounts: readiness,
+            oldest_available_slot: oldest,
+            archival_depth_slots: None,
+            failed_checks: Vec::new(),
+            blockhash_valid: true,
+            notes: Vec::new(),
+        }
+    }
+    let ready = score_endpoint(
+        CompareProfile::Indexer,
+        &ep(Some(ProgramAccountsReadiness::Ready), Some(0)),
+    );
+    let none = score_endpoint(CompareProfile::Indexer, &ep(None, None));
+    let degraded = score_endpoint(
+        CompareProfile::Indexer,
+        &ep(Some(ProgramAccountsReadiness::Degraded), None),
+    );
+    let gated = score_endpoint(
+        CompareProfile::Indexer,
+        &ep(Some(ProgramAccountsReadiness::Gated), Some(500)),
+    );
+    assert!(ready > none, "ready+archival should beat neutral");
+    assert!(none > degraded, "degraded should subtract");
+    assert!(degraded > gated, "gated should be worst");
+
+    // Other profiles ignore data-readiness entirely.
+    let general_ready = score_endpoint(
+        CompareProfile::General,
+        &ep(Some(ProgramAccountsReadiness::Ready), Some(0)),
+    );
+    let general_gated = score_endpoint(
+        CompareProfile::General,
+        &ep(Some(ProgramAccountsReadiness::Gated), Some(500)),
+    );
+    assert_eq!(general_ready, general_gated);
+}
+
+#[tokio::test]
+async fn compare_data_ranks_indexer_and_flags_gated() {
+    use solana_infra_doctor::checks::ProgramAccountsReadiness;
+    let ready = MockRpcServer::start(data_responses(
+        200,
+        r#"{"jsonrpc":"2.0","id":13,"result":[]}"#,
+        r#"{"jsonrpc":"2.0","id":14,"result":0}"#,
+    ));
+    let gated = MockRpcServer::start(data_responses(
+        190,
+        r#"{"jsonrpc":"2.0","id":13,"error":{"code":-32010,"message":"excluded from account secondary indexes"}}"#,
+        r#"{"jsonrpc":"2.0","id":14,"result":423000000}"#,
+    ));
+
+    let report = run_compare(CompareArgs {
+        rpc: vec![ready.url.clone(), gated.url.clone()],
+        profile: CompareProfile::Indexer,
+        json: false,
+        report: None,
+        data: true,
+        data_program: None,
+        timeout_ms: 1_000,
+    })
+    .await
+    .unwrap();
+    ready.join();
+    gated.join();
+
+    assert_eq!(
+        report.endpoints[0].program_accounts,
+        Some(ProgramAccountsReadiness::Ready)
+    );
+    assert_eq!(report.endpoints[0].oldest_available_slot, Some(0));
+    assert_eq!(
+        report.endpoints[1].program_accounts,
+        Some(ProgramAccountsReadiness::Gated)
+    );
+    // The ready, full-archival endpoint outranks the gated one.
+    assert!(report.endpoints[0].score > report.endpoints[1].score);
+    assert_eq!(report.best_endpoint_index, Some(1));
+    // The gated endpoint carries the indexer advisory note.
+    assert!(report.endpoints[1]
+        .notes
+        .iter()
+        .any(|note| note.contains("getProgramAccounts is gated")));
+
+    // Human (verbose) and Markdown render the data-readiness fields.
+    let human = solana_infra_doctor::compare::render_human(&report, plain(), true);
+    assert!(human.contains("getProgramAccounts"));
+    assert!(human.contains("gated"));
+    assert!(human.contains("Archival"));
+    let md = solana_infra_doctor::compare::render_markdown(&report);
+    assert!(md.contains("- getProgramAccounts: ready"));
+    assert!(md.contains("- Archival: full (from genesis)"));
+}
+
+#[test]
+fn indexer_degraded_data_readiness_notes_and_renders() {
+    use solana_infra_doctor::checks::ProgramAccountsReadiness;
+    use solana_infra_doctor::compare::{build_compare_report, render_human, render_markdown};
+
+    let mut degraded = compare_check_report(
+        "https://degraded.example.com/",
+        Verdict::Good,
+        Some(100),
+        Some(50),
+        true,
+        &[],
+    );
+    degraded.program_accounts = Some(ProgramAccountsReadiness::Degraded);
+    degraded.oldest_available_slot = None;
+    let healthy = compare_check_report(
+        "https://healthy.example.com/",
+        Verdict::Good,
+        Some(100),
+        Some(50),
+        true,
+        &[],
+    );
+
+    let report = build_compare_report(CompareProfile::Indexer, &[degraded, healthy]);
+    assert!(report.endpoints[0]
+        .notes
+        .iter()
+        .any(|note| note.contains("could not be determined")));
+
+    let human = render_human(&report, plain(), true);
+    assert!(human.contains("degraded"));
+    let md = render_markdown(&report);
+    assert!(md.contains("- getProgramAccounts: degraded"));
+    assert!(md.contains("- Archival: n/a"));
 }

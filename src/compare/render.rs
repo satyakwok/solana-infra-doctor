@@ -2,6 +2,7 @@
 
 use super::CompareReport;
 use crate::{
+    checks::ProgramAccountsReadiness,
     color::Palette,
     error::AppError,
     output::{
@@ -90,7 +91,7 @@ fn render_endpoints_verbose(report: &CompareReport, palette: Palette, output: &m
         } else {
             palette.bad("no")
         };
-        let rows = vec![
+        let mut rows = vec![
             detail_row(palette, "URL", endpoint.url.clone()),
             detail_row(palette, "Genesis", format_genesis(&endpoint.genesis_hash)),
             vec![
@@ -145,6 +146,18 @@ fn render_endpoints_verbose(report: &CompareReport, palette: Palette, output: &m
                 ),
             ],
         ];
+        if let Some(readiness) = endpoint.program_accounts {
+            rows.push(detail_row(
+                palette,
+                "getProgramAccounts",
+                format_gpa(readiness),
+            ));
+            rows.push(detail_row(
+                palette,
+                "Archival",
+                format_archival(endpoint.oldest_available_slot),
+            ));
+        }
         output.push_str(&table::render(&rows, 3));
         if !endpoint.notes.is_empty() {
             output.push_str(&palette.label("Notes"));
@@ -221,6 +234,23 @@ fn format_readiness(ready: bool) -> String {
         "ready".to_string()
     } else {
         "not ready".to_string()
+    }
+}
+
+fn format_gpa(readiness: ProgramAccountsReadiness) -> String {
+    match readiness {
+        ProgramAccountsReadiness::Ready => "ready",
+        ProgramAccountsReadiness::Gated => "gated",
+        ProgramAccountsReadiness::Degraded => "degraded",
+    }
+    .to_string()
+}
+
+fn format_archival(oldest: Option<u64>) -> String {
+    match oldest {
+        Some(0) => "full (from genesis)".to_string(),
+        Some(oldest) => format!("from slot {oldest}"),
+        None => "n/a".to_string(),
     }
 }
 
@@ -306,6 +336,16 @@ pub fn render_markdown(report: &CompareReport) -> String {
             "- Token-2022: {}\n",
             format_readiness(endpoint.token_2022_ready)
         ));
+        if let Some(readiness) = endpoint.program_accounts {
+            output.push_str(&format!(
+                "- getProgramAccounts: {}\n",
+                format_gpa(readiness)
+            ));
+            output.push_str(&format!(
+                "- Archival: {}\n",
+                format_archival(endpoint.oldest_available_slot)
+            ));
+        }
         output.push_str(&format!(
             "- Failed checks: {}\n",
             format_failed_checks(&endpoint.failed_checks)

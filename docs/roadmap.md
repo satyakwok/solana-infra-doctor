@@ -18,17 +18,17 @@ yet available.
   and JSON + Markdown reports.
 - **Data-readiness checks (`check --data`)** — `getProgramAccounts` enablement
   (with an optional `--data-program` override) and archival history depth, for
-  indexer and data-pipeline workloads.
+  indexer and data-pipeline workloads — and **data-readiness scoring in
+  `compare --data`** (the `indexer` profile ranks endpoints by it).
 
 ## Planned (not yet available)
 
 1. ~~Yellowstone gRPC readiness check~~ — **shipped**.
 2. ~~Yellowstone gRPC endpoint comparison~~ — **shipped**.
 3. **RPC data-readiness and indexer-readiness** — deeper checks for indexer and
-   data-pipeline workloads. First step (`getProgramAccounts` enablement + archival
-   depth) **shipped** via `check --data`; next: a method-support matrix,
-   `getProgramAccounts` capacity/limits, and wiring data-readiness into the
-   `compare` indexer profile.
+   data-pipeline workloads. Shipped: `getProgramAccounts` enablement + archival
+   depth (`check --data`) and indexer-profile scoring (`compare --data`). Next: a
+   method-support matrix and `getProgramAccounts` capacity/limit probing.
 4. **Local Agave node diagnostics** — inspect a locally reachable validator's
    health and basic configuration.
 5. **Agave and Geyser configuration linting** — flag common misconfigurations.

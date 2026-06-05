@@ -2,6 +2,14 @@
 
 ## 0.13.0 - Unreleased
 
+- Add **`sol-doctor compare --data`**: run the data-readiness checks across every
+  endpoint and let the **`indexer` profile score them** — `getProgramAccounts`
+  enablement and archival depth now feed the indexer ranking, so `compare` can
+  answer *"which provider should I pay for my indexer."* A `gated`
+  `getProgramAccounts` materially lowers an endpoint's indexer score and adds an
+  advisory note; a `ready` endpoint with full archival is rewarded. The fields
+  appear in the JSON and Markdown comparison reports. Off by default; other
+  profiles ignore data-readiness.
 - Add **`sol-doctor check --data`**: data-readiness checks for indexer and
   data-pipeline workloads, under a new informational `Data` category.
   - **`getProgramAccounts` enablement** — a bounded probe (a `dataSize: 1` filter

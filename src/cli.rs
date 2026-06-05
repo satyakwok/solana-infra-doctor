@@ -236,6 +236,17 @@ pub struct CompareArgs {
     #[arg(long)]
     pub report: Option<PathBuf>,
 
+    /// Run data-readiness checks (`getProgramAccounts` enablement + archival depth)
+    /// for every endpoint. Off by default; the `indexer` profile scores them when
+    /// enabled. Adds two requests per endpoint.
+    #[arg(long)]
+    pub data: bool,
+
+    /// Program to probe for `getProgramAccounts` readiness when `--data` is set
+    /// (default: a small, non-excluded program). Applies to every endpoint.
+    #[arg(long)]
+    pub data_program: Option<String>,
+
     /// Per-request timeout in milliseconds.
     #[arg(long, default_value_t = 5_000)]
     pub timeout_ms: u64,

@@ -3,7 +3,7 @@
 //! lives in [`render`] and scoring in [`scoring`].
 
 use crate::{
-    checks::{run_check, CheckReport, CheckStatus},
+    checks::{run_check, CheckReport, CheckStatus, ProgramAccountsReadiness},
     cli::{CheckArgs, CompareArgs, CompareProfile},
     error::AppError,
     verdict::Verdict,
@@ -105,6 +105,17 @@ pub struct CompareEndpoint {
     pub token_program_ready: bool,
     /// Whether the RPC serves the Token-2022 program as an executable program.
     pub token_2022_ready: bool,
+    /// `getProgramAccounts` enablement, when `--data` ran (`None` otherwise).
+    /// The `indexer` profile scores this; other profiles ignore it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub program_accounts: Option<ProgramAccountsReadiness>,
+    /// Oldest slot the endpoint can serve (`getFirstAvailableBlock`), when `--data`
+    /// ran. `0` means full archival from genesis.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oldest_available_slot: Option<u64>,
+    /// Archival depth in slots behind the freshest slot, when computable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archival_depth_slots: Option<u64>,
     /// Names of the checks that failed.
     pub failed_checks: Vec<String>,
     /// Whether the latest blockhash validated.
@@ -126,16 +137,18 @@ pub async fn run_compare(args: CompareArgs) -> Result<CompareReport, AppError> {
     }
 
     let timeout_ms = args.timeout_ms;
+    let data = args.data;
+    let data_program = args.data_program;
     let checks = args.rpc.into_iter().map(|rpc| {
         run_check(CheckArgs {
             rpc,
             json: false,
             fail_on_warning: false,
             samples: 1,
-            // `compare` does not run data-readiness checks yet (a follow-up wires
-            // the indexer profile to them); keep the existing behavior.
-            data: false,
-            data_program: None,
+            // Data-readiness probes run only when `--data` is set; the `indexer`
+            // profile scores them when present.
+            data,
+            data_program: data_program.clone(),
             timeout_ms,
         })
     });
@@ -260,6 +273,9 @@ fn build_endpoint(
         prioritization_fee_median: report.prioritization_fee_median,
         token_program_ready: report.token_program_ready,
         token_2022_ready: report.token_2022_ready,
+        program_accounts: report.program_accounts,
+        oldest_available_slot: report.oldest_available_slot,
+        archival_depth_slots: report.archival_depth_slots,
         failed_checks,
         blockhash_valid,
         notes: Vec::new(),

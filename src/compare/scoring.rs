@@ -1,7 +1,7 @@
 //! Deterministic per-endpoint scoring and profile-specific notes.
 
 use super::CompareEndpoint;
-use crate::{cli::CompareProfile, verdict::Verdict};
+use crate::{checks::ProgramAccountsReadiness, cli::CompareProfile, verdict::Verdict};
 
 /// Deterministically score an endpoint from `0` to `100` for a workload profile.
 pub fn score_endpoint(profile: CompareProfile, endpoint: &CompareEndpoint) -> u8 {
@@ -93,6 +93,18 @@ pub fn score_endpoint(profile: CompareProfile, endpoint: &CompareEndpoint) -> u8
             {
                 score -= 10;
             }
+            // Data-readiness (only present when `compare --data` ran):
+            // getProgramAccounts is the indexer's core primitive.
+            match endpoint.program_accounts {
+                Some(ProgramAccountsReadiness::Ready) => score += 10,
+                Some(ProgramAccountsReadiness::Gated) => score -= 10,
+                Some(ProgramAccountsReadiness::Degraded) => score -= 5,
+                None => {}
+            }
+            // Full archival (history from genesis) helps historical backfill.
+            if endpoint.oldest_available_slot == Some(0) {
+                score += 5;
+            }
         }
         CompareProfile::Ci => {
             if !matches!(endpoint.verdict, Verdict::Good) {
@@ -177,6 +189,26 @@ pub(crate) fn profile_notes(profile: CompareProfile, endpoint: &CompareEndpoint)
             {
                 notes.push(
                     "Recent performance samples are unavailable for indexer diagnostics."
+                        .to_string(),
+                );
+            }
+            match endpoint.program_accounts {
+                Some(ProgramAccountsReadiness::Gated) => notes.push(
+                    "getProgramAccounts is gated; indexers that scan program accounts cannot use this endpoint."
+                        .to_string(),
+                ),
+                Some(ProgramAccountsReadiness::Degraded) => notes.push(
+                    "getProgramAccounts readiness could not be determined (transport failure)."
+                        .to_string(),
+                ),
+                _ => {}
+            }
+            if endpoint
+                .oldest_available_slot
+                .is_some_and(|oldest| oldest > 0)
+            {
+                notes.push(
+                    "Endpoint serves only recent history (not full archival); deep backfill may be limited."
                         .to_string(),
                 );
             }

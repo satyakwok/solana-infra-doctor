@@ -426,6 +426,22 @@ sol-doctor compare \
   --report rpc-report.md
 ```
 
+Rank endpoints by data-readiness for an indexer (`getProgramAccounts` enablement
+and archival depth feed the `indexer` score):
+
+```bash
+sol-doctor compare \
+  --rpc https://api.mainnet-beta.solana.com \
+  --rpc https://example-rpc-provider.com \
+  --profile indexer --data
+```
+
+`--data` runs the data-readiness probes for every endpoint (off by default; see
+[`check --data`](#usage)). A `gated` `getProgramAccounts` lowers an endpoint's
+`indexer` score and adds an advisory note; a `ready` endpoint with full archival
+is rewarded. Other profiles ignore data-readiness. Use `--data-program` to probe
+your own program.
+
 Compare mode supports these profiles:
 
 | Profile | Use case |
