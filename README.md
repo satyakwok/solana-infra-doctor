@@ -229,6 +229,7 @@ sample terminal output and Markdown reports.
 | Area | Checks |
 | --- | --- |
 | HTTP JSON-RPC | health, version, genesis hash, slot, blockhash, performance samples |
+| Data-readiness (`--data`) | `getProgramAccounts` enablement (ready/gated/degraded) and archival history depth (`getFirstAvailableBlock`), for indexer/data workloads |
 | Freshness & fees | block-time freshness (`getBlockTime`), recent prioritization fees |
 | Compare mode | score, latency, slot freshness, block-time freshness, failed checks, best/worst endpoint |
 | Network safety | rejects mixed-network comparisons by genesis hash |
@@ -356,6 +357,29 @@ Use a custom per-request timeout:
 ```bash
 sol-doctor check --rpc https://api.mainnet-beta.solana.com --timeout-ms 3000
 ```
+
+Add data-readiness checks for indexer/data workloads (`getProgramAccounts`
+enablement and archival history depth):
+
+```bash
+sol-doctor check --rpc https://api.mainnet-beta.solana.com --data
+```
+
+`--data` is off by default (it adds two extra requests). It reports whether
+`getProgramAccounts` is `ready`, `gated` (disabled, or the program is excluded
+from the account secondary indexes), or `degraded`, and how far back the endpoint
+serves history (`getFirstAvailableBlock`). A `gated` result is a capability fact,
+not an endpoint failure — it does not change the general verdict. Probe your own
+program (the most accurate signal for an indexer) with `--data-program`:
+
+```bash
+sol-doctor check --rpc https://api.mainnet-beta.solana.com \
+  --data --data-program <YOUR_PROGRAM_PUBKEY>
+```
+
+> Note: the probe tests `getProgramAccounts` *enablement*. Many providers enable
+> it for normal programs but exclude large ones (e.g. the SPL Token program) from
+> the secondary indexes, so test the specific program your workload scans.
 
 Make warning behavior explicit for CI:
 
@@ -924,6 +948,8 @@ boundaries.
 
 **Recently shipped**
 
+- **Data-readiness checks** (`check --data`) — `getProgramAccounts` enablement and
+  archival history depth for indexer/data workloads.
 - **Yellowstone gRPC endpoint comparison** (`grpc compare`) — rank gRPC endpoints
   by connect latency, time-to-first-event, and slot freshness for a workload
   profile.

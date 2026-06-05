@@ -34,6 +34,8 @@
 //!     json: false,
 //!     fail_on_warning: false,
 //!     samples: 1,
+//!     data: false,
+//!     data_program: None,
 //!     timeout_ms: 5_000,
 //! })
 //! .await?;

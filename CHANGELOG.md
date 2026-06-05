@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.13.0 - Unreleased
+
+- Add **`sol-doctor check --data`**: data-readiness checks for indexer and
+  data-pipeline workloads, under a new informational `Data` category.
+  - **`getProgramAccounts` enablement** — a bounded probe (a `dataSize: 1` filter
+    that matches no account, plus `dataSlice` length `0`) detects whether the
+    method is enabled without enumerating a large account set. Classified as
+    `ready`, `gated` (disabled or the program is excluded from the account
+    secondary indexes), or `degraded` (transport failure). A `gated` result is a
+    capability fact, not an endpoint failure: it does **not** change the general
+    verdict. Pass `--data-program <PUBKEY>` to probe your own program (the default
+    is a small, non-excluded program that reflects method enablement).
+  - **Archival history depth** — `getFirstAvailableBlock` reports the oldest slot
+    the endpoint can serve (`0` = history from genesis / full archival) and the
+    depth in slots behind the current slot.
+  - Data-capability probes are excluded from the latency average that drives the
+    verdict (a slow `getProgramAccounts` does not make a healthy endpoint look
+    slow), and the JSON report gains `program_accounts`, `oldest_available_slot`,
+    and `archival_depth_slots` fields (present only with `--data`). The checks are
+    off by default; `--data` adds two extra requests.
+
 ## 0.12.0 - 2026-06-05
 
 - Add **`sol-doctor grpc compare`**: rank multiple Yellowstone gRPC endpoints for

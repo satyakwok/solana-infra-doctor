@@ -232,6 +232,7 @@ untuk contoh output terminal dan laporan Markdown.
 | Area | Pemeriksaan |
 | --- | --- |
 | HTTP JSON-RPC | health, version, genesis hash, slot, blockhash, performance sample |
+| Data-readiness (`--data`) | enablement `getProgramAccounts` (ready/gated/degraded) + kedalaman history archival (`getFirstAvailableBlock`), untuk workload indexer/data |
 | Kesegaran & fee | kesegaran block-time (`getBlockTime`), prioritization fee terbaru |
 | Mode compare | skor, latency, kesegaran slot, kesegaran block-time, pemeriksaan gagal, endpoint terbaik/terburuk |
 | Keamanan jaringan | menolak perbandingan lintas-jaringan berdasarkan genesis hash |
@@ -361,6 +362,29 @@ Pakai timeout per-request kustom:
 ```bash
 sol-doctor check --rpc https://api.mainnet-beta.solana.com --timeout-ms 3000
 ```
+
+Tambahkan pemeriksaan data-readiness untuk workload indexer/data (enablement
+`getProgramAccounts` dan kedalaman history archival):
+
+```bash
+sol-doctor check --rpc https://api.mainnet-beta.solana.com --data
+```
+
+`--data` mati secara default (menambah dua request). Ia melaporkan apakah
+`getProgramAccounts` itu `ready`, `gated` (dimatikan, atau program-nya dikecualikan
+dari secondary index account), atau `degraded`, dan seberapa jauh history yang
+disajikan endpoint (`getFirstAvailableBlock`). Hasil `gated` itu fakta kapabilitas,
+bukan kegagalan endpoint — ia tidak mengubah verdict umum. Probe program-mu sendiri
+(sinyal paling akurat untuk indexer) dengan `--data-program`:
+
+```bash
+sol-doctor check --rpc https://api.mainnet-beta.solana.com \
+  --data --data-program <PUBKEY_PROGRAM_KAMU>
+```
+
+> Catatan: probe ini menguji *enablement* `getProgramAccounts`. Banyak provider
+> mengaktifkannya untuk program biasa tapi mengecualikan program besar (mis. SPL
+> Token) dari secondary index — jadi tes program spesifik yang workload-mu scan.
 
 Buat perilaku warning eksplisit untuk CI:
 
@@ -935,6 +959,8 @@ ruang lingkup.
 
 **Baru saja dirilis**
 
+- **Pemeriksaan data-readiness** (`check --data`) — enablement `getProgramAccounts`
+  dan kedalaman history archival untuk workload indexer/data.
 - **Perbandingan endpoint Yellowstone gRPC** (`grpc compare`) — rank endpoint
   gRPC berdasarkan latency connect, waktu ke event pertama, dan kesegaran slot
   untuk sebuah profil beban kerja.

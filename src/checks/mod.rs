@@ -46,6 +46,16 @@ pub struct CheckReport {
     pub token_program_ready: bool,
     /// Whether the Token-2022 program account is served as an executable program.
     pub token_2022_ready: bool,
+    /// `getProgramAccounts` enablement, when `--data` was set (`None` otherwise).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub program_accounts: Option<ProgramAccountsReadiness>,
+    /// The oldest slot the endpoint can serve (`getFirstAvailableBlock`), when
+    /// `--data` was set. `0` means history from genesis (full archival).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oldest_available_slot: Option<u64>,
+    /// Archival depth in slots behind the current slot, when computable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archival_depth_slots: Option<u64>,
     /// Whether `--fail-on-warning` was set (surfaced for CI context).
     pub fail_on_warning: bool,
     /// The individual per-method check results.
@@ -109,7 +119,8 @@ impl RpcCheck {
 }
 
 /// The diagnostic category a check belongs to. `Core` and `Blockhash` checks are
-/// critical to readiness; `Performance` and `Token` checks are informational.
+/// critical to readiness; `Performance`, `Token`, and `Data` checks are
+/// informational.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckCategory {
@@ -117,23 +128,42 @@ pub enum CheckCategory {
     Blockhash,
     Performance,
     Token,
+    /// Data-capability checks (`getProgramAccounts` enablement, archival depth),
+    /// run only with `--data`. Informational: they report capability facts and do
+    /// not, on their own, make a general endpoint unusable.
+    Data,
 }
 
 impl CheckCategory {
     /// The human-readable category name (`Core`, `Blockhash`, `Performance`,
-    /// `Token`).
+    /// `Token`, `Data`).
     pub fn label(self) -> &'static str {
         match self {
             Self::Core => "Core",
             Self::Blockhash => "Blockhash",
             Self::Performance => "Performance",
             Self::Token => "Token",
+            Self::Data => "Data",
         }
     }
 
     fn is_critical(self) -> bool {
         matches!(self, Self::Core | Self::Blockhash)
     }
+}
+
+/// Whether the endpoint serves `getProgramAccounts` — the readiness most indexer
+/// and data-pipeline workloads depend on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgramAccountsReadiness {
+    /// The method is enabled (the bounded probe returned a result set).
+    Ready,
+    /// The method responded but is unavailable for the probed program (disabled,
+    /// or the program is excluded from the account secondary indexes).
+    Gated,
+    /// The probe could not complete (timeout or transport failure).
+    Degraded,
 }
 
 /// Whether an individual check succeeded or failed.
@@ -187,6 +217,9 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
                 prioritization_fee_median: None,
                 token_program_ready: false,
                 token_2022_ready: false,
+                program_accounts: None,
+                oldest_available_slot: None,
+                archival_depth_slots: None,
                 fail_on_warning: args.fail_on_warning,
                 checks: vec![RpcCheck::failed(
                     CheckCategory::Core,
@@ -228,9 +261,28 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
     let (token_2022_check, token_2022_ready) = check_token_2022(&client).await;
     checks.push(token_2022_check);
 
+    // Optional data-readiness checks (`--data`): getProgramAccounts enablement and
+    // archival history depth. These are capability probes, not request-latency
+    // measurements, so they are excluded from the latency average below.
+    let (program_accounts, oldest_available_slot, archival_depth_slots) = if args.data {
+        let program = args.data_program.as_deref().unwrap_or(DEFAULT_DATA_PROGRAM);
+        let (gpa_check, readiness) = check_program_accounts(&client, program).await;
+        checks.push(gpa_check);
+        let current_slot = current_slot_from_checks(&checks);
+        let (archival_check, oldest, depth) = check_archival_depth(&client, current_slot).await;
+        checks.push(archival_check);
+        (Some(readiness), oldest, depth)
+    } else {
+        (None, None, None)
+    };
+
+    // Average latency reflects the request-latency methods only; data-capability
+    // probes (which can be slow without meaning the endpoint is slow) never
+    // pollute the latency that drives the verdict.
     let average_latency_ms = average_latency_ms(
         checks
             .iter()
+            .filter(|check| check.category != CheckCategory::Data)
             .filter_map(|check| check.latency_ms.map(|millis| Latency { millis })),
     );
 
@@ -255,6 +307,9 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
         prioritization_fee_median,
         token_program_ready,
         token_2022_ready,
+        program_accounts,
+        oldest_available_slot,
+        archival_depth_slots,
         fail_on_warning: args.fail_on_warning,
         checks,
     })
@@ -680,6 +735,128 @@ async fn check_program_account(
     }
 }
 
+/// Default `getProgramAccounts` probe target: the ComputeBudget native program.
+/// It owns no accounts (so the bounded probe returns instantly) and is not one of
+/// the large programs validators exclude from account secondary indexes, so it
+/// cleanly reflects whether the method itself is enabled.
+const DEFAULT_DATA_PROGRAM: &str = "ComputeBudget111111111111111111111111111111";
+
+/// Approximate slots per day on Solana (~2.5 slots/sec) for a rough archival-depth
+/// estimate in days. Presentation-only; the exact slot count is also reported.
+const SLOTS_PER_DAY: u64 = 216_000;
+
+/// The current slot parsed from a successful `getSlot` check (`"slot N"`), used to
+/// compute archival depth without an extra request.
+fn current_slot_from_checks(checks: &[RpcCheck]) -> Option<u64> {
+    checks
+        .iter()
+        .find(|check| check.method == "getSlot" && check.status == CheckStatus::Success)
+        .and_then(|check| check.detail.strip_prefix("slot "))
+        .and_then(|slot| slot.parse().ok())
+}
+
+/// Probe `getProgramAccounts` enablement with a bounded request: a `dataSize: 1`
+/// filter matches no real account (so it returns an empty set) and `dataSlice`
+/// length `0` drops account data — proving the method is enabled and accepts
+/// filters without enumerating a large account set. This is a capability fact, not
+/// a readiness pass/fail: a `Gated` result does not fail the general verdict (only
+/// the `compare` indexer profile penalizes it). A transport failure is an
+/// informational failure.
+async fn check_program_accounts(
+    client: &RpcClient,
+    program: &str,
+) -> (RpcCheck, ProgramAccountsReadiness) {
+    const METHOD: &str = "getProgramAccounts";
+    let params = vec![
+        Value::String(program.to_string()),
+        serde_json::json!({
+            "encoding": "base64",
+            "dataSlice": { "offset": 0, "length": 0 },
+            "filters": [ { "dataSize": 1 } ],
+        }),
+    ];
+
+    match call_rpc::<Vec<Value>>(client, 13, METHOD, params).await {
+        Ok((response, latency)) => match response.result {
+            Some(accounts) => (
+                RpcCheck::success(
+                    CheckCategory::Data,
+                    METHOD,
+                    latency,
+                    format!(
+                        "getProgramAccounts enabled (probed on {program}, {} matched)",
+                        accounts.len()
+                    ),
+                ),
+                ProgramAccountsReadiness::Ready,
+            ),
+            // An RPC-level error means the server answered "no" for this program
+            // (method disabled, or program excluded from secondary indexes). That
+            // is a capability fact — record it without failing the general verdict.
+            None => {
+                let detail = match &response.error {
+                    Some(error) => format!(
+                        "getProgramAccounts unavailable on {program} (RPC error {})",
+                        error.code
+                    ),
+                    None => format!("getProgramAccounts returned no result on {program}"),
+                };
+                (
+                    RpcCheck::success(CheckCategory::Data, METHOD, latency, detail),
+                    ProgramAccountsReadiness::Gated,
+                )
+            }
+        },
+        Err(error) => (
+            failed_from_error(CheckCategory::Data, METHOD, error),
+            ProgramAccountsReadiness::Degraded,
+        ),
+    }
+}
+
+/// Probe archival history depth via `getFirstAvailableBlock`: the oldest slot the
+/// endpoint can still serve. `0` means history from genesis (full archival). The
+/// depth behind `current_slot` is reported in slots and a rough day estimate.
+async fn check_archival_depth(
+    client: &RpcClient,
+    current_slot: Option<u64>,
+) -> (RpcCheck, Option<u64>, Option<u64>) {
+    const METHOD: &str = "getFirstAvailableBlock";
+    match call_rpc::<u64>(client, 14, METHOD, Vec::new()).await {
+        Ok((response, latency)) => match response.result {
+            Some(oldest) => {
+                let depth = current_slot.map(|current| current.saturating_sub(oldest));
+                let detail = if oldest == 0 {
+                    "history from genesis (full archival)".to_string()
+                } else {
+                    match depth {
+                        Some(slots) => format!(
+                            "history from slot {oldest} (~{slots} slots / ~{} days behind tip)",
+                            slots / SLOTS_PER_DAY
+                        ),
+                        None => format!("history from slot {oldest}"),
+                    }
+                };
+                (
+                    RpcCheck::success(CheckCategory::Data, METHOD, latency, detail),
+                    Some(oldest),
+                    depth,
+                )
+            }
+            None => (
+                failed_from_response(CheckCategory::Data, METHOD, Some(latency), &response),
+                None,
+                None,
+            ),
+        },
+        Err(error) => (
+            failed_from_error(CheckCategory::Data, METHOD, error),
+            None,
+            None,
+        ),
+    }
+}
+
 async fn call_rpc<T>(
     client: &RpcClient,
     id: u64,
@@ -926,6 +1103,8 @@ mod tests {
             json: false,
             fail_on_warning: false,
             samples: 1,
+            data: false,
+            data_program: None,
             timeout_ms: 1_000,
         }
     }

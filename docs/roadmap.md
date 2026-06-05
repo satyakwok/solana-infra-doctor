@@ -16,13 +16,19 @@ yet available.
   endpoints by connect latency, time-to-first-event, and slot freshness with
   `general` / `latency` / `indexer` profiles, per-endpoint `x-token` env pairing,
   and JSON + Markdown reports.
+- **Data-readiness checks (`check --data`)** — `getProgramAccounts` enablement
+  (with an optional `--data-program` override) and archival history depth, for
+  indexer and data-pipeline workloads.
 
 ## Planned (not yet available)
 
 1. ~~Yellowstone gRPC readiness check~~ — **shipped**.
 2. ~~Yellowstone gRPC endpoint comparison~~ — **shipped**.
 3. **RPC data-readiness and indexer-readiness** — deeper checks for indexer and
-   data-pipeline workloads.
+   data-pipeline workloads. First step (`getProgramAccounts` enablement + archival
+   depth) **shipped** via `check --data`; next: a method-support matrix,
+   `getProgramAccounts` capacity/limits, and wiring data-readiness into the
+   `compare` indexer profile.
 4. **Local Agave node diagnostics** — inspect a locally reachable validator's
    health and basic configuration.
 5. **Agave and Geyser configuration linting** — flag common misconfigurations.

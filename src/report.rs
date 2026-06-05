@@ -1,5 +1,5 @@
 use crate::{
-    checks::{CheckCategory, CheckReport, CheckStatus, RpcCheck},
+    checks::{CheckCategory, CheckReport, CheckStatus, ProgramAccountsReadiness, RpcCheck},
     color::Palette,
     error::AppError,
     output::{
@@ -8,11 +8,12 @@ use crate::{
     },
 };
 
-const CATEGORY_ORDER: [CheckCategory; 4] = [
+const CATEGORY_ORDER: [CheckCategory; 5] = [
     CheckCategory::Core,
     CheckCategory::Blockhash,
     CheckCategory::Performance,
     CheckCategory::Token,
+    CheckCategory::Data,
 ];
 
 /// Print the machine-readable JSON report to stdout.
@@ -125,6 +126,22 @@ pub fn render_human(report: &CheckReport, palette: Palette, verbose: bool) -> St
                 ready(report.token_program_ready),
                 ready(report.token_2022_ready)
             )),
+        ]);
+    }
+    if let Some(readiness) = report.program_accounts {
+        let gpa = match readiness {
+            ProgramAccountsReadiness::Ready => "getProgramAccounts ready",
+            ProgramAccountsReadiness::Gated => "getProgramAccounts gated",
+            ProgramAccountsReadiness::Degraded => "getProgramAccounts degraded",
+        };
+        let archival = match report.oldest_available_slot {
+            Some(0) => " · history full (from genesis)".to_string(),
+            Some(oldest) => format!(" · history from slot {oldest}"),
+            None => String::new(),
+        };
+        result_rows.push(vec![
+            Cell::styled("Data", palette.label("Data")),
+            Cell::plain(format!("{gpa}{archival}")),
         ]);
     }
     output.push_str(&table::render(&result_rows, 3));
@@ -273,6 +290,9 @@ mod tests {
             prioritization_fee_median: None,
             token_program_ready: true,
             token_2022_ready: true,
+            program_accounts: None,
+            oldest_available_slot: None,
+            archival_depth_slots: None,
             fail_on_warning: true,
             checks: vec![
                 RpcCheck {

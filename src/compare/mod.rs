@@ -132,6 +132,10 @@ pub async fn run_compare(args: CompareArgs) -> Result<CompareReport, AppError> {
             json: false,
             fail_on_warning: false,
             samples: 1,
+            // `compare` does not run data-readiness checks yet (a follow-up wires
+            // the indexer profile to them); keep the existing behavior.
+            data: false,
+            data_program: None,
             timeout_ms,
         })
     });

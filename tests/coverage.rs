@@ -139,6 +139,8 @@ fn args_for(url: String) -> CheckArgs {
         json: false,
         fail_on_warning: false,
         samples: 1,
+        data: false,
+        data_program: None,
         timeout_ms: 1_000,
     }
 }
@@ -475,6 +477,9 @@ fn verdict_latency_and_report_helpers_are_covered() {
         prioritization_fee_median: None,
         token_program_ready: true,
         token_2022_ready: true,
+        program_accounts: None,
+        oldest_available_slot: None,
+        archival_depth_slots: None,
         fail_on_warning: true,
         checks: vec![success, failed],
     };
@@ -643,6 +648,9 @@ fn compare_check_report(
         prioritization_fee_median: None,
         token_program_ready: false,
         token_2022_ready: false,
+        program_accounts: None,
+        oldest_available_slot: None,
+        archival_depth_slots: None,
         fail_on_warning: false,
         checks,
     }
@@ -1131,6 +1139,8 @@ async fn check_does_not_leak_secret_in_error_output() {
         json: false,
         fail_on_warning: false,
         samples: 1,
+        data: false,
+        data_program: None,
         timeout_ms: 1_500,
     })
     .await
@@ -2460,4 +2470,181 @@ fn compare_token_readiness_scoring_notes_and_render() {
         .notes
         .iter()
         .any(|note| note.contains("token-trading bot")));
+}
+
+// --- Data-readiness checks (`--data`): getProgramAccounts + archival depth ---
+
+fn data_args(url: String) -> CheckArgs {
+    CheckArgs {
+        rpc: url,
+        json: false,
+        fail_on_warning: false,
+        samples: 1,
+        data: true,
+        data_program: None,
+        timeout_ms: 1_000,
+    }
+}
+
+/// The 12 healthy core responses (ids 1-12) plus the two data responses
+/// (getProgramAccounts id 13, getFirstAvailableBlock id 14).
+fn data_responses(slot: u64, gpa: &'static str, first_block: &'static str) -> Vec<MockResponse> {
+    let mut responses = healthy_rpc_responses(slot);
+    responses.push(MockResponse::ok(gpa));
+    responses.push(MockResponse::ok(first_block));
+    responses
+}
+
+#[tokio::test]
+async fn data_reports_gpa_ready_and_archival_depth() {
+    let server = MockRpcServer::start(data_responses(
+        424_000_000,
+        r#"{"jsonrpc":"2.0","id":13,"result":[]}"#,
+        r#"{"jsonrpc":"2.0","id":14,"result":423000000}"#,
+    ));
+    let report = run_check(data_args(server.url.clone())).await.unwrap();
+    server.join();
+
+    assert_eq!(
+        report.program_accounts,
+        Some(solana_infra_doctor::checks::ProgramAccountsReadiness::Ready)
+    );
+    assert_eq!(report.oldest_available_slot, Some(423_000_000));
+    assert_eq!(report.archival_depth_slots, Some(1_000_000));
+    // Data readiness is informational: a ready endpoint stays GOOD.
+    assert_eq!(report.verdict, Verdict::Good);
+
+    let concise = render_human(&report, plain(), false);
+    assert!(concise.contains("Data"));
+    assert!(concise.contains("getProgramAccounts ready"));
+    assert!(concise.contains("history from slot 423000000"));
+    let verbose = render_human(&report, plain(), true);
+    assert!(verbose.contains("getFirstAvailableBlock"));
+    // JSON carries the new fields.
+    let json = render_json(&report).unwrap();
+    assert!(json.contains("\"program_accounts\": \"ready\""));
+    assert!(json.contains("\"oldest_available_slot\": 423000000"));
+}
+
+#[tokio::test]
+async fn data_reports_gpa_gated_and_full_archival() {
+    let server = MockRpcServer::start(data_responses(
+        424_000_000,
+        r#"{"jsonrpc":"2.0","id":13,"error":{"code":-32010,"message":"excluded from account secondary indexes"}}"#,
+        r#"{"jsonrpc":"2.0","id":14,"result":0}"#,
+    ));
+    let report = run_check(data_args(server.url.clone())).await.unwrap();
+    server.join();
+
+    assert_eq!(
+        report.program_accounts,
+        Some(solana_infra_doctor::checks::ProgramAccountsReadiness::Gated)
+    );
+    assert_eq!(report.oldest_available_slot, Some(0));
+    // A gated gPA is a capability fact, not an endpoint failure: still GOOD.
+    assert_eq!(report.verdict, Verdict::Good);
+
+    let concise = render_human(&report, plain(), false);
+    assert!(concise.contains("getProgramAccounts gated"));
+    assert!(concise.contains("history full (from genesis)"));
+    // The gated probe still renders as a PASS in the Data category.
+    let verbose = render_human(&report, colored(), true);
+    assert!(verbose.contains('\u{1b}'));
+}
+
+#[tokio::test]
+async fn data_gpa_malformed_no_error_is_gated() {
+    // A response with neither result nor error exercises the no-error gated branch.
+    let server = MockRpcServer::start(data_responses(
+        424_000_000,
+        r#"{"jsonrpc":"2.0","id":13}"#,
+        r#"{"jsonrpc":"2.0","id":14,"result":423999000}"#,
+    ));
+    let report = run_check(data_args(server.url.clone())).await.unwrap();
+    server.join();
+
+    assert_eq!(
+        report.program_accounts,
+        Some(solana_infra_doctor::checks::ProgramAccountsReadiness::Gated)
+    );
+    assert_eq!(report.archival_depth_slots, Some(1_000));
+}
+
+#[tokio::test]
+async fn data_archival_failure_warns_but_gpa_ready() {
+    let server = MockRpcServer::start(data_responses(
+        424_000_000,
+        r#"{"jsonrpc":"2.0","id":13,"result":[]}"#,
+        r#"{"jsonrpc":"2.0","id":14,"error":{"code":-32000,"message":"unavailable"}}"#,
+    ));
+    let report = run_check(data_args(server.url.clone())).await.unwrap();
+    server.join();
+
+    assert_eq!(
+        report.program_accounts,
+        Some(solana_infra_doctor::checks::ProgramAccountsReadiness::Ready)
+    );
+    assert_eq!(report.oldest_available_slot, None);
+    assert_eq!(report.archival_depth_slots, None);
+    // The archival probe failed (informational) → WARNING, not BAD.
+    assert_eq!(report.verdict, Verdict::Warning);
+}
+
+#[tokio::test]
+async fn data_archival_without_current_slot_omits_depth() {
+    // getSlot (id 4) fails, so the current slot is unknown; archival still reports
+    // the oldest slot but cannot compute a depth.
+    let server = MockRpcServer::start(vec![
+        MockResponse::ok(health_ok()),
+        MockResponse::ok(version_ok()),
+        MockResponse::ok(genesis_ok()),
+        MockResponse::ok(
+            r#"{"jsonrpc":"2.0","id":4,"error":{"code":-32000,"message":"unavailable"}}"#,
+        ),
+        MockResponse::ok(latest_blockhash_ok()),
+        MockResponse::ok(blockhash_valid_ok()),
+        MockResponse::ok(performance_ok()),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":8,"result":100}"#),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":9,"result":1700000000}"#),
+        MockResponse::ok(
+            r#"{"jsonrpc":"2.0","id":10,"result":[{"slot":1,"prioritizationFee":0}]}"#,
+        ),
+        MockResponse::ok(token_program_account_ok(11)),
+        MockResponse::ok(token_program_account_ok(12)),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":13,"result":[]}"#),
+        MockResponse::ok(r#"{"jsonrpc":"2.0","id":14,"result":421000000}"#),
+    ]);
+    let report = run_check(data_args(server.url.clone())).await.unwrap();
+    server.join();
+
+    assert_eq!(report.oldest_available_slot, Some(421_000_000));
+    assert_eq!(report.archival_depth_slots, None);
+    // getSlot is a critical Core check, so the run is BAD overall.
+    assert_eq!(report.verdict, Verdict::Bad);
+    let verbose = render_human(&report, plain(), true);
+    assert!(verbose.contains("history from slot 421000000"));
+}
+
+#[tokio::test]
+async fn data_probe_transport_failure_is_degraded() {
+    // Only the 12 core responses are served; the data probes (13, 14) hit a closed
+    // port → transport failure → Degraded gPA and a failed archival probe.
+    let server = MockRpcServer::start(healthy_rpc_responses(424_000_000));
+    let mut args = data_args(server.url.clone());
+    // A custom (default) program; the request never reaches a live server.
+    args.data_program = Some("ComputeBudget111111111111111111111111111111".to_string());
+    let report = run_check(args).await.unwrap();
+    server.join();
+
+    assert_eq!(
+        report.program_accounts,
+        Some(solana_infra_doctor::checks::ProgramAccountsReadiness::Degraded)
+    );
+    assert_eq!(report.oldest_available_slot, None);
+    // Informational transport failures cap the verdict at WARNING.
+    assert_eq!(report.verdict, Verdict::Warning);
+
+    // Rendering the degraded readiness with no archival slot covers those branches.
+    let concise = render_human(&report, plain(), false);
+    assert!(concise.contains("getProgramAccounts degraded"));
 }

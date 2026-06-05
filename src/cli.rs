@@ -201,6 +201,17 @@ pub struct CheckArgs {
     #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=1000))]
     pub samples: u32,
 
+    /// Run data-readiness checks: `getProgramAccounts` enablement and archival
+    /// history depth. Off by default; these add a couple of extra requests.
+    #[arg(long)]
+    pub data: bool,
+
+    /// Program to probe for `getProgramAccounts` readiness (default: a small,
+    /// non-excluded program). Pass your own program to test its gPA availability;
+    /// only used with `--data`.
+    #[arg(long)]
+    pub data_program: Option<String>,
+
     /// Per-request timeout in milliseconds.
     #[arg(long, default_value_t = 5_000)]
     pub timeout_ms: u64,
