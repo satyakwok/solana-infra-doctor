@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Solana Infra Doctor is currently pre-release. Security fixes target the default branch until stable releases are published.
+Solana Infra Doctor is published to [crates.io](https://crates.io/crates/solana-infra-doctor) and is pre-1.0, so it follows semantic versioning with the `0.x` convention (minor releases may include breaking changes). The **latest published release** is the supported version; older releases are not maintained. Security fixes land on the default branch (`main`) and ship in the next release.
 
 ## Reporting a Vulnerability
 
