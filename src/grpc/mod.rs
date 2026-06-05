@@ -22,6 +22,7 @@ use std::time::Duration;
 use tonic::metadata::{Ascii, MetadataValue};
 
 mod check;
+pub mod compare;
 pub mod endpoint;
 pub mod error_kind;
 mod render;

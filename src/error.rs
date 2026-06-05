@@ -38,6 +38,17 @@ pub enum AppError {
     #[error("compare requires at least 2 RPC URLs")]
     CompareRequiresTwoRpcUrls,
 
+    /// `grpc compare` was invoked with fewer than two gRPC endpoints.
+    #[error("grpc compare requires at least 2 gRPC endpoints")]
+    GrpcCompareRequiresTwoEndpoints,
+
+    /// The number of `--x-token-env` values did not pair with `--grpc`: it must
+    /// be `0` (all anonymous), `1` (shared), or one per endpoint.
+    #[error(
+        "--x-token-env count ({tokens}) must be 0, 1, or equal to the number of --grpc endpoints ({endpoints})"
+    )]
+    GrpcCompareTokenCountMismatch { endpoints: usize, tokens: usize },
+
     /// The Markdown report could not be written to disk.
     #[error("failed to write Markdown report to {path}: {source}")]
     WriteMarkdownReport {

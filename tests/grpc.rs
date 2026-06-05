@@ -812,3 +812,641 @@ fn grpc_error_kinds_are_stable_and_mapped() {
     assert!(PermissionDenied.is_auth_failure());
     assert!(!Unavailable.is_auth_failure());
 }
+
+/// Integration tests for `grpc compare`: deterministic offline scoring/ranking
+/// from crafted `GrpcReport` fixtures, plus full-path runs against the in-process
+/// mock Yellowstone server. Drives diff coverage for `src/grpc/compare/*`.
+mod grpc_compare {
+    use super::{start_mock, AuthBehavior, MockGeyser, StreamBehavior, UnaryBehavior};
+    use solana_infra_doctor::cli::{GrpcCompareArgs, GrpcCompareProfile};
+    use solana_infra_doctor::color::Palette;
+    use solana_infra_doctor::grpc::compare::{build_grpc_compare_report, run_grpc_compare};
+    use solana_infra_doctor::grpc::{
+        self, AuthStatus, CheckStatus, GrpcErrorKind, GrpcReport, StreamResult, UnaryResult,
+        GRPC_SCHEMA_VERSION,
+    };
+    use solana_infra_doctor::verdict::Verdict;
+
+    /// Build a `GrpcReport` fixture exercising the fields the comparison reads.
+    #[allow(clippy::too_many_arguments)]
+    fn report(
+        endpoint: &str,
+        verdict: Verdict,
+        connect_ms: Option<u128>,
+        first_event_ms: Option<u128>,
+        latest_slot: Option<u64>,
+        updates: u64,
+        stream_pass: bool,
+        failed_methods: &[&'static str],
+        token_provided: bool,
+        auth: AuthStatus,
+    ) -> GrpcReport {
+        let unary = failed_methods
+            .iter()
+            .map(|method| UnaryResult {
+                method,
+                status: CheckStatus::Fail,
+                latency_ms: Some(5),
+                detail: "failed".to_string(),
+                error_kind: Some(GrpcErrorKind::Unavailable),
+            })
+            .chain(std::iter::once(UnaryResult {
+                method: "Ping",
+                status: CheckStatus::Pass,
+                latency_ms: Some(2),
+                detail: "pong".to_string(),
+                error_kind: None,
+            }))
+            .collect();
+        GrpcReport {
+            schema_version: GRPC_SCHEMA_VERSION,
+            verdict,
+            summary: "fixture".to_string(),
+            grpc_endpoint: endpoint.to_string(),
+            rpc_endpoint: None,
+            token_provided,
+            connect_latency_ms: connect_ms,
+            authentication: auth,
+            unary,
+            stream: StreamResult {
+                status: if stream_pass {
+                    CheckStatus::Pass
+                } else {
+                    CheckStatus::Fail
+                },
+                opened: stream_pass,
+                first_event_latency_ms: first_event_ms,
+                updates_observed: updates,
+                latest_slot,
+                detail: "stream".to_string(),
+                error_kind: None,
+            },
+            latest_slot,
+            rpc_slot: None,
+            slot_difference: None,
+            checks: Vec::new(),
+            warnings: Vec::new(),
+            remediation: Vec::new(),
+            error_kinds: Vec::new(),
+        }
+    }
+
+    /// A strong, fast, fresh endpoint (general score reaches 100).
+    fn strong(endpoint: &str, slot: u64) -> GrpcReport {
+        report(
+            endpoint,
+            Verdict::Good,
+            Some(50),
+            Some(300),
+            Some(slot),
+            5,
+            true,
+            &[],
+            true,
+            AuthStatus::Accepted,
+        )
+    }
+
+    #[test]
+    fn general_scores_and_ranks_two_endpoints() {
+        let reports = [strong("https://fast.example.com/", 1_000), {
+            // Slower connect, slower first event, staler slot, one failed method.
+            report(
+                "https://slow.example.com/",
+                Verdict::Warning,
+                Some(900),
+                Some(4_000),
+                Some(900),
+                1,
+                false,
+                &["GetSlot"],
+                true,
+                AuthStatus::Accepted,
+            )
+        }];
+        let out = build_grpc_compare_report(GrpcCompareProfile::General, &reports);
+
+        assert_eq!(
+            out.schema_version,
+            solana_infra_doctor::grpc::compare::GRPC_COMPARE_SCHEMA_VERSION
+        );
+        assert_eq!(out.endpoints.len(), 2);
+        assert_eq!(out.endpoints[0].score, 100);
+        assert_eq!(out.endpoints[0].slot_lag, Some(0));
+        assert_eq!(out.endpoints[1].slot_lag, Some(100));
+        assert!(out.endpoints[1].score < out.endpoints[0].score);
+        assert_eq!(out.best_endpoint_index, Some(1));
+        assert_eq!(out.worst_endpoint_index, Some(2));
+        assert_eq!(out.endpoints[1].failed_methods, vec!["GetSlot".to_string()]);
+        assert_eq!(out.endpoints[1].unary_failed, 1);
+    }
+
+    #[test]
+    fn latency_profile_penalizes_slow_connect_and_first_event() {
+        // connect 500 (>300) and first_event 2000 (>1500), otherwise healthy.
+        let fixture = report(
+            "https://e.example.com/",
+            Verdict::Good,
+            Some(500),
+            Some(2_000),
+            Some(1_000),
+            5,
+            true,
+            &[],
+            true,
+            AuthStatus::Accepted,
+        );
+        let general =
+            build_grpc_compare_report(GrpcCompareProfile::General, std::slice::from_ref(&fixture));
+        let latency = build_grpc_compare_report(GrpcCompareProfile::Latency, &[fixture]);
+
+        // General: 40 + connect(<=800→5) + first_event(<=3000→5) + slot_lag(0→15) + stream(10) = 75.
+        assert_eq!(general.endpoints[0].score, 75);
+        // Latency subtracts 8 (connect>300) and 12 (first_event>1500) → 55.
+        assert_eq!(latency.endpoints[0].score, 55);
+        assert!(latency.endpoints[0]
+            .notes
+            .iter()
+            .any(|note| note.contains("Connect latency is high")));
+        assert!(latency.endpoints[0]
+            .notes
+            .iter()
+            .any(|note| note.contains("first-slot-update")));
+    }
+
+    #[test]
+    fn indexer_profile_penalizes_stale_and_unstable() {
+        let reports = [
+            strong("https://fresh.example.com/", 1_000),
+            // Stale (lag 100), stream not ok, few updates.
+            report(
+                "https://stale.example.com/",
+                Verdict::Good,
+                Some(50),
+                Some(300),
+                Some(900),
+                0,
+                false,
+                &[],
+                true,
+                AuthStatus::Accepted,
+            ),
+        ];
+        let indexer = build_grpc_compare_report(GrpcCompareProfile::Indexer, &reports);
+        // Stale endpoint: 40 + connect(15) + first_event(20) + slot_lag(>50→0) + stream(false→0)
+        // = 75, then indexer subtracts 12 (lag>50) + 10 (!stream) + 5 (updates<2) = 48.
+        assert_eq!(indexer.endpoints[1].score, 48);
+        let notes = &indexer.endpoints[1].notes;
+        assert!(notes.iter().any(|n| n.contains("Slot freshness is poor")));
+        assert!(notes
+            .iter()
+            .any(|n| n.contains("did not reach a healthy state")));
+    }
+
+    #[test]
+    fn recommendation_describes_connect_vs_stream_tradeoff() {
+        let reports = [
+            // Best overall: moderate connect, fast first event, fresh.
+            report(
+                "https://best.example.com/",
+                Verdict::Good,
+                Some(200),
+                Some(300),
+                Some(1_000),
+                5,
+                true,
+                &[],
+                true,
+                AuthStatus::Accepted,
+            ),
+            // Connects faster but slower first event and staler → lower score.
+            report(
+                "https://faster-connect.example.com/",
+                Verdict::Good,
+                Some(50),
+                Some(2_000),
+                Some(900),
+                5,
+                true,
+                &[],
+                true,
+                AuthStatus::Accepted,
+            ),
+        ];
+        let out = build_grpc_compare_report(GrpcCompareProfile::Latency, &reports);
+        assert_eq!(out.best_endpoint_index, Some(1));
+        assert!(out.recommendation.contains("connects faster"));
+        assert!(out.recommendation.contains("time-to-first-event"));
+    }
+
+    #[test]
+    fn recommendation_avoid_lines_per_profile() {
+        let make = || {
+            [
+                strong("https://best.example.com/", 1_000),
+                // Worse on everything (no faster-connect tradeoff).
+                report(
+                    "https://worst.example.com/",
+                    Verdict::Bad,
+                    Some(2_000),
+                    None,
+                    Some(900),
+                    0,
+                    false,
+                    &["GetSlot"],
+                    true,
+                    AuthStatus::Accepted,
+                ),
+            ]
+        };
+        let general = build_grpc_compare_report(GrpcCompareProfile::General, &make());
+        assert!(general.recommendation.contains("Review gRPC #2"));
+        let latency = build_grpc_compare_report(GrpcCompareProfile::Latency, &make());
+        assert!(latency
+            .recommendation
+            .contains("Avoid gRPC #2 for latency-sensitive"));
+        let indexer = build_grpc_compare_report(GrpcCompareProfile::Indexer, &make());
+        assert!(indexer.recommendation.contains("freshness-sensitive"));
+    }
+
+    #[test]
+    fn notes_flag_missing_token_against_authenticated_endpoint() {
+        let fixture = report(
+            "https://needs-token.example.com/",
+            Verdict::Bad,
+            Some(40),
+            None,
+            None,
+            0,
+            false,
+            &[],
+            false,
+            AuthStatus::Unauthenticated,
+        );
+        let out = build_grpc_compare_report(GrpcCompareProfile::General, &[fixture]);
+        assert!(out.endpoints[0]
+            .notes
+            .iter()
+            .any(|n| n.contains("supply an x-token via --x-token-env")));
+        // All-None metrics format as n/a, not a panic.
+        assert_eq!(out.endpoints[0].slot_lag, None);
+    }
+
+    #[test]
+    fn render_human_json_markdown_are_consistent_and_secret_free() {
+        let reports = [
+            strong("https://a.example.com/", 1_000),
+            report(
+                "https://b.example.com/",
+                Verdict::Warning,
+                Some(120),
+                Some(900),
+                Some(980),
+                3,
+                true,
+                &["GetSlot"],
+                true,
+                AuthStatus::Accepted,
+            ),
+        ];
+        let out = build_grpc_compare_report(GrpcCompareProfile::Indexer, &reports);
+
+        let concise = grpc::compare::render_human(&out, Palette::new(false), false);
+        assert!(concise.contains("Yellowstone gRPC Comparison"));
+        assert!(concise.contains("First event"));
+        assert!(concise.contains("Best gRPC: #1"));
+        assert!(concise.contains("Tip: run with --verbose"));
+        // Disabled palette is byte-stable (no ANSI).
+        assert!(!concise.contains('\u{1b}'));
+        // Enabled palette colorizes.
+        let colored = grpc::compare::render_human(&out, Palette::new(true), false);
+        assert!(colored.contains('\u{1b}'));
+
+        let verbose = grpc::compare::render_human(&out, Palette::new(false), true);
+        assert!(verbose.contains("gRPC #1"));
+        assert!(verbose.contains("Updates observed"));
+        assert!(verbose.contains("Failed methods"));
+
+        let json = grpc::compare::render_json(&out).unwrap();
+        assert!(json.contains("\"schema_version\": 1"));
+        assert!(json.contains("\"profile\": \"indexer\""));
+        assert!(!json.contains("x-token"));
+
+        let md = grpc::compare::render_markdown(&out);
+        assert!(md.contains("# Solana Infra Doctor Yellowstone gRPC Compare Report"));
+        assert!(md.contains("## Comparison"));
+        assert!(md.contains("## Per-Endpoint Details"));
+        assert!(md.contains("## Limitations"));
+        assert!(md.contains("not affiliated with or endorsed by Solana Foundation"));
+    }
+
+    #[test]
+    fn write_markdown_report_writes_file() {
+        let out = build_grpc_compare_report(
+            GrpcCompareProfile::General,
+            &[
+                strong("https://a.example.com/", 1),
+                strong("https://b.example.com/", 1),
+            ],
+        );
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("sol-doctor-grpc-compare-{}.md", std::process::id()));
+        grpc::compare::write_markdown_report(&out, &path).unwrap();
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert!(contents.contains("Yellowstone gRPC Compare Report"));
+        std::fs::remove_file(&path).ok();
+    }
+
+    fn compare_args(grpc: Vec<String>, x_token_env: Vec<String>) -> GrpcCompareArgs {
+        GrpcCompareArgs {
+            grpc,
+            x_token_env,
+            profile: GrpcCompareProfile::General,
+            json: false,
+            report: None,
+            timeout_ms: 2_000,
+            duration_ms: 700,
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn full_path_ranks_healthy_above_unauthenticated() {
+        let good = start_mock(MockGeyser {
+            stream: StreamBehavior::Healthy,
+            auth: AuthBehavior::Open,
+            unary: UnaryBehavior::Healthy,
+        })
+        .await;
+        let locked = start_mock(MockGeyser {
+            stream: StreamBehavior::Healthy,
+            auth: AuthBehavior::RequireToken,
+            unary: UnaryBehavior::Healthy,
+        })
+        .await;
+
+        let out = run_grpc_compare(compare_args(vec![good, locked], vec![]))
+            .await
+            .unwrap();
+
+        assert_eq!(out.endpoints.len(), 2);
+        assert_eq!(out.endpoints[0].verdict, Verdict::Good);
+        assert_eq!(out.endpoints[1].verdict, Verdict::Bad);
+        assert_eq!(out.best_endpoint_index, Some(1));
+        assert_eq!(out.worst_endpoint_index, Some(2));
+        // Render the live report in every format.
+        let _ = grpc::compare::render_human(&out, Palette::new(false), true);
+        let _ = grpc::compare::render_json(&out).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn shared_token_applies_to_all_endpoints() {
+        let one = start_mock(MockGeyser {
+            stream: StreamBehavior::Healthy,
+            auth: AuthBehavior::RequireToken,
+            unary: UnaryBehavior::Healthy,
+        })
+        .await;
+        let two = start_mock(MockGeyser {
+            stream: StreamBehavior::Healthy,
+            auth: AuthBehavior::RequireToken,
+            unary: UnaryBehavior::Healthy,
+        })
+        .await;
+
+        let env = "SOL_DOCTOR_TEST_GRPC_COMPARE_SHARED";
+        std::env::set_var(env, "shared-token-value");
+        let out = run_grpc_compare(compare_args(vec![one, two], vec![env.to_string()]))
+            .await
+            .unwrap();
+        std::env::remove_var(env);
+
+        assert_eq!(out.endpoints[0].verdict, Verdict::Good);
+        assert_eq!(out.endpoints[1].verdict, Verdict::Good);
+        assert!(out.endpoints[0].token_provided);
+        assert!(out.endpoints[1].token_provided);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn per_endpoint_tokens_pair_by_position() {
+        let one = start_mock(MockGeyser {
+            stream: StreamBehavior::Healthy,
+            auth: AuthBehavior::RequireToken,
+            unary: UnaryBehavior::Healthy,
+        })
+        .await;
+        let two = start_mock(MockGeyser {
+            stream: StreamBehavior::Healthy,
+            auth: AuthBehavior::RequireToken,
+            unary: UnaryBehavior::Healthy,
+        })
+        .await;
+
+        let env_a = "SOL_DOCTOR_TEST_GRPC_COMPARE_A";
+        let env_b = "SOL_DOCTOR_TEST_GRPC_COMPARE_B";
+        std::env::set_var(env_a, "token-a");
+        std::env::set_var(env_b, "token-b");
+        let out = run_grpc_compare(compare_args(
+            vec![one, two],
+            vec![env_a.to_string(), env_b.to_string()],
+        ))
+        .await
+        .unwrap();
+        std::env::remove_var(env_a);
+        std::env::remove_var(env_b);
+
+        assert_eq!(out.endpoints[0].verdict, Verdict::Good);
+        assert_eq!(out.endpoints[1].verdict, Verdict::Good);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn requires_at_least_two_endpoints() {
+        let err = run_grpc_compare(compare_args(
+            vec!["https://a.example.com".to_string()],
+            vec![],
+        ))
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            solana_infra_doctor::error::AppError::GrpcCompareRequiresTwoEndpoints
+        ));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn token_env_count_must_pair() {
+        let err = run_grpc_compare(compare_args(
+            vec![
+                "https://a.example.com".to_string(),
+                "https://b.example.com".to_string(),
+            ],
+            vec!["A".to_string(), "B".to_string(), "C".to_string()],
+        ))
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            solana_infra_doctor::error::AppError::GrpcCompareTokenCountMismatch {
+                endpoints: 2,
+                tokens: 3
+            }
+        ));
+    }
+
+    #[test]
+    fn unknown_verdict_and_indexer_few_updates_note() {
+        // Unknown verdict exercises the lowest non-zero base.
+        let unknown = report(
+            "https://u.example.com/",
+            Verdict::Unknown,
+            Some(50),
+            Some(300),
+            Some(1_000),
+            5,
+            true,
+            &[],
+            true,
+            AuthStatus::Accepted,
+        );
+        let out = build_grpc_compare_report(
+            GrpcCompareProfile::Latency,
+            &[unknown, strong("https://s.example.com/", 1_000)],
+        );
+        assert!(out.endpoints[0].score < out.endpoints[1].score);
+
+        // Indexer with a healthy stream but only one update → "few updates" note.
+        let few = report(
+            "https://few.example.com/",
+            Verdict::Good,
+            Some(50),
+            Some(300),
+            Some(1_000),
+            1,
+            true,
+            &[],
+            true,
+            AuthStatus::Accepted,
+        );
+        let indexer = build_grpc_compare_report(
+            GrpcCompareProfile::Indexer,
+            &[few, strong("https://s2.example.com/", 1_000)],
+        );
+        assert!(indexer.endpoints[0]
+            .notes
+            .iter()
+            .any(|n| n.contains("Few slot updates")));
+    }
+
+    #[test]
+    fn recommendation_tradeoff_via_staler_branch() {
+        let reports = [
+            // Best: slightly slower connect, equal first event, fresher slot.
+            report(
+                "https://best.example.com/",
+                Verdict::Good,
+                Some(200),
+                Some(300),
+                Some(1_000),
+                5,
+                true,
+                &[],
+                true,
+                AuthStatus::Accepted,
+            ),
+            // Connects faster, equal first event, but staler slot → staler branch.
+            report(
+                "https://faster-stale.example.com/",
+                Verdict::Good,
+                Some(50),
+                Some(300),
+                Some(900),
+                5,
+                true,
+                &[],
+                true,
+                AuthStatus::Accepted,
+            ),
+        ];
+        let out = build_grpc_compare_report(GrpcCompareProfile::General, &reports);
+        assert_eq!(out.best_endpoint_index, Some(1));
+        assert!(out.recommendation.contains("connects faster"));
+    }
+
+    #[test]
+    fn all_none_metrics_render_na_and_rank_deterministically() {
+        // Every metric absent (e.g. transport failures) exercises the None arms in
+        // both the scorer's tiebreakers and the renderers' n/a formatting.
+        let none = |endpoint: &str| {
+            report(
+                endpoint,
+                Verdict::Bad,
+                None,
+                None,
+                None,
+                0,
+                false,
+                &[],
+                false,
+                AuthStatus::Unknown,
+            )
+        };
+        let out = build_grpc_compare_report(
+            GrpcCompareProfile::General,
+            &[
+                none("https://a.example.com/"),
+                none("https://b.example.com/"),
+            ],
+        );
+        assert!(out.best_endpoint_index.is_some());
+        let concise = grpc::compare::render_human(&out, Palette::new(false), false);
+        assert!(concise.contains("n/a"));
+        let md = grpc::compare::render_markdown(&out);
+        assert!(md.contains("n/a"));
+    }
+
+    #[test]
+    fn render_covers_notes_and_recommendation_fallbacks() {
+        let few = report(
+            "https://few.example.com/",
+            Verdict::Good,
+            Some(50),
+            Some(300),
+            Some(1_000),
+            1,
+            true,
+            &[],
+            true,
+            AuthStatus::Accepted,
+        );
+        let mut out = build_grpc_compare_report(
+            GrpcCompareProfile::Indexer,
+            &[few, strong("https://s.example.com/", 1_000)],
+        );
+        // The endpoint with notes exercises the markdown "- Notes:" branch.
+        let md = grpc::compare::render_markdown(&out);
+        assert!(md.contains("- Notes:"));
+
+        // best_endpoint_index = None falls back to the raw recommendation text.
+        let mut no_best = out.clone();
+        no_best.best_endpoint_index = None;
+        let human = grpc::compare::render_human(&no_best, Palette::new(false), false);
+        assert!(human.contains("Recommendation"));
+
+        // A best index missing from the endpoint list falls back to the number.
+        out.best_endpoint_index = Some(99);
+        let human2 = grpc::compare::render_human(&out, Palette::new(false), false);
+        assert!(human2.contains("#99"));
+    }
+
+    #[test]
+    fn write_markdown_report_errors_on_unwritable_path() {
+        let out = build_grpc_compare_report(
+            GrpcCompareProfile::General,
+            &[
+                strong("https://a.example.com/", 1),
+                strong("https://b.example.com/", 1),
+            ],
+        );
+        let bad = std::path::Path::new("/this-directory-does-not-exist-xyz/report.md");
+        assert!(grpc::compare::write_markdown_report(&out, bad).is_err());
+    }
+}

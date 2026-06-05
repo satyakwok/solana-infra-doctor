@@ -12,12 +12,15 @@ yet available.
 - **Yellowstone gRPC readiness check (`grpc check`)** — connect/TLS, optional
   `x-token` auth, safe unary probes, a narrow slot-only `Subscribe` stream with
   time-to-first-update, and an optional HTTP RPC slot cross-check.
+- **Yellowstone gRPC endpoint comparison (`grpc compare`)** — rank multiple gRPC
+  endpoints by connect latency, time-to-first-event, and slot freshness with
+  `general` / `latency` / `indexer` profiles, per-endpoint `x-token` env pairing,
+  and JSON + Markdown reports.
 
 ## Planned (not yet available)
 
 1. ~~Yellowstone gRPC readiness check~~ — **shipped**.
-2. **Yellowstone gRPC endpoint comparison** — rank multiple gRPC endpoints
-   (latency, first-event time, slot freshness) like `compare` does for HTTP.
+2. ~~Yellowstone gRPC endpoint comparison~~ — **shipped**.
 3. **RPC data-readiness and indexer-readiness** — deeper checks for indexer and
    data-pipeline workloads.
 4. **Local Agave node diagnostics** — inspect a locally reachable validator's

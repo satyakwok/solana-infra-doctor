@@ -56,6 +56,72 @@ pub struct GrpcArgs {
 pub enum GrpcCommand {
     /// Check whether a Yellowstone gRPC endpoint is ready for a backend workload.
     Check(GrpcCheckArgs),
+
+    /// Compare multiple Yellowstone gRPC endpoints for a workload profile.
+    Compare(GrpcCompareArgs),
+}
+
+/// Arguments for `grpc compare`.
+#[derive(Debug, Args, Clone)]
+pub struct GrpcCompareArgs {
+    /// Yellowstone gRPC endpoint URLs to compare. Provide at least two.
+    #[arg(long, required = true)]
+    pub grpc: Vec<String>,
+
+    /// Environment variable names holding each endpoint's `x-token`, paired by
+    /// position with `--grpc`. Provide none (all anonymous), one (shared by every
+    /// endpoint), or exactly one per `--grpc`. The token is never accepted
+    /// directly on the command line and is never printed.
+    #[arg(long = "x-token-env")]
+    pub x_token_env: Vec<String>,
+
+    /// Workload profile used for scoring and recommendations.
+    #[arg(long, default_value_t = GrpcCompareProfile::General)]
+    pub profile: GrpcCompareProfile,
+
+    /// Emit machine-readable JSON.
+    #[arg(long)]
+    pub json: bool,
+
+    /// Write a Markdown report to this path.
+    #[arg(long)]
+    pub report: Option<PathBuf>,
+
+    /// Connection and per-request timeout in milliseconds.
+    #[arg(long, default_value_t = 10_000)]
+    pub timeout_ms: u64,
+
+    /// Bounded slot-stream observation window, in milliseconds.
+    #[arg(long = "duration", default_value_t = 5_000)]
+    pub duration_ms: u64,
+}
+
+/// The workload profile that drives `grpc compare` scoring and recommendations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum GrpcCompareProfile {
+    /// Balanced scoring across connect, first-event, and slot freshness.
+    General,
+    /// Latency-sensitive (bots/MEV): connect and time-to-first-event weigh most.
+    Latency,
+    /// Freshness-sensitive (indexers): slot freshness and stream stability weigh most.
+    Indexer,
+}
+
+impl GrpcCompareProfile {
+    /// The lowercase profile name (`general`, `latency`, `indexer`).
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::General => "general",
+            Self::Latency => "latency",
+            Self::Indexer => "indexer",
+        }
+    }
+}
+
+impl std::fmt::Display for GrpcCompareProfile {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.label())
+    }
 }
 
 /// Arguments for `grpc check`.
