@@ -41,6 +41,8 @@ pipelines, and infrastructure reviews.
   `sol-doctor ws`.
 - Checks **Yellowstone gRPC** readiness (connect, optional `x-token` auth, safe
   unary probes, and a slot-only stream) with `sol-doctor grpc check`.
+- Compares **Yellowstone gRPC** endpoints by connect latency, time-to-first-event,
+  and slot freshness for a workload profile with `sol-doctor grpc compare`.
 - Emits human-readable terminal output, JSON, and Markdown reports.
 
 It is local-first and dependency-light: HTTP JSON-RPC via `reqwest`, WebSocket
@@ -200,6 +202,15 @@ Check Yellowstone gRPC readiness:
 sol-doctor grpc check --grpc https://example-yellowstone-endpoint
 ```
 
+Compare multiple Yellowstone gRPC endpoints:
+
+```bash
+sol-doctor grpc compare \
+  --grpc https://example-yellowstone-a \
+  --grpc https://example-yellowstone-b \
+  --profile latency
+```
+
 JSON output (machine-readable, for CI):
 
 ```bash
@@ -223,6 +234,7 @@ sample terminal output and Markdown reports.
 | Network safety | rejects mixed-network comparisons by genesis hash |
 | WebSocket | URL derivation, connect, `slotSubscribe`/`logsSubscribe`, first notification, reconnect, unsubscribe, close |
 | Yellowstone gRPC | connect + TLS/HTTP-2, optional `x-token` auth, unary probes (`Ping`/`GetVersion`/`GetSlot`/`GetBlockHeight`/`GetLatestBlockhash`/`IsBlockhashValid`), slot-only stream first-event, optional HTTP RPC slot cross-check |
+| Yellowstone gRPC compare | rank endpoints by verdict, connect latency, time-to-first-event, slot freshness, and stream stability for `general`/`latency`/`indexer` profiles, with per-endpoint `x-token` env pairing |
 | Output safety | redacts credentials and likely API keys (and never prints the gRPC `x-token`) in terminal, JSON, Markdown, and errors |
 
 ## Workload Profiles
@@ -531,6 +543,53 @@ Tip: run with --verbose to see full details.
 Exit codes follow the same mapping as the other commands (see
 [Exit Codes](#exit-codes)): `0` GOOD, `1` WARNING, `2` BAD, `3` UNKNOWN/error.
 
+### Yellowstone gRPC comparison
+
+Rank two or more Yellowstone gRPC endpoints for a workload, the way `compare`
+ranks HTTP RPC endpoints. Each endpoint runs the same safe, slot-only `grpc check`
+probe **concurrently**, then endpoints are scored and ranked by verdict, connect
+latency, time-to-first-slot-update, slot freshness, and stream stability:
+
+```bash
+sol-doctor grpc compare \
+  --grpc https://example-yellowstone-a \
+  --grpc https://example-yellowstone-b \
+  --profile latency
+```
+
+Most Yellowstone endpoints require an `x-token`, and different providers use
+different tokens. Pair each token with its endpoint by passing `--x-token-env`
+once per `--grpc`, in the same order. As with `grpc check`, tokens are read
+**only** from environment variables — never from the command line — and are never
+printed, serialized, or logged:
+
+```bash
+export YELLOWSTONE_A_TOKEN="token-for-a"
+export YELLOWSTONE_B_TOKEN="token-for-b"
+
+sol-doctor grpc compare \
+  --grpc https://example-yellowstone-a --x-token-env YELLOWSTONE_A_TOKEN \
+  --grpc https://example-yellowstone-b --x-token-env YELLOWSTONE_B_TOKEN \
+  --profile indexer
+```
+
+Pass `--x-token-env` **none** (all endpoints anonymous), **once** (one token
+shared by every endpoint), or **once per endpoint** (paired by position). Any
+other count is rejected.
+
+| Profile | Optimized for |
+| --- | --- |
+| `general` | Balanced connect, first-event, and slot freshness. |
+| `latency` | Bots/MEV: connect latency and time-to-first-slot-update. |
+| `indexer` | Indexers: slot freshness and slot-stream stability. |
+
+`grpc compare` emits concise / `--verbose` human output, `--json` (with a
+`schema_version`), and a `--report <PATH>` Markdown report. It subscribes **only**
+to slots and is a point-in-time diagnostic, not a benchmark. Because Yellowstone
+gRPC does not expose a genesis hash, `grpc compare` cannot detect a mixed-network
+comparison the way HTTP `compare` does — compare endpoints on the **same** Solana
+network, and slot freshness is ranked relative to the freshest endpoint observed.
+
 ### Color output
 
 Human output is colorized when stdout is a terminal. Color is **semantic**:
@@ -799,9 +858,11 @@ specific release tag (e.g. `@v0.9.0`) for fully reproducible runs.
 
 - `check` and `compare` use HTTP JSON-RPC; `sol-doctor ws` covers slot and logs
   subscription readiness (no account/program subscriptions yet).
-- `grpc check` is a single-endpoint readiness check that subscribes **only** to
-  slots; gRPC endpoint comparison and broader subscription diagnostics are not
-  included yet. It is a point-in-time diagnostic, not a benchmark or SLA.
+- `grpc check` (single endpoint) and `grpc compare` (multi-endpoint ranking)
+  subscribe **only** to slots; broader subscription diagnostics are not included
+  yet. Both are point-in-time diagnostics, not a benchmark or SLA. `grpc compare`
+  cannot detect a mixed-network comparison (gRPC exposes no genesis hash), so
+  compare endpoints on the same Solana network.
 - Scores are deterministic heuristics, not provider guarantees.
 - This is a local-first CLI, not a hosted monitoring service.
 - Token readiness confirms the SPL Token and Token-2022 program accounts are
@@ -863,6 +924,9 @@ boundaries.
 
 **Recently shipped**
 
+- **Yellowstone gRPC endpoint comparison** (`grpc compare`) — rank gRPC endpoints
+  by connect latency, time-to-first-event, and slot freshness for a workload
+  profile.
 - **Yellowstone gRPC readiness check** (`grpc check`).
 - Repeat sampling mode (`--samples`) with p50/p95 latency percentiles.
 - SPL Token and Token-2022 readiness checks.
@@ -871,9 +935,8 @@ boundaries.
 
 **Near-term**
 
-- Yellowstone gRPC endpoint comparison (rank multiple gRPC endpoints).
-- A Markdown report for `check` (today only `compare` and `grpc check` emit one)
-  and richer report templates.
+- A Markdown report for `check` (today `compare`, `grpc check`, and `grpc compare`
+  emit one) and richer report templates.
 - More example reports and localized docs.
 
 **Later**

@@ -41,6 +41,9 @@ dipercaya untuk bot, wallet, indexer, pipeline CI, dan tinjauan infrastruktur.
   lewat `sol-doctor ws`.
 - Memeriksa kesiapan **Yellowstone gRPC** (connect, auth `x-token` opsional,
   unary probe aman, dan stream slot-only) lewat `sol-doctor grpc check`.
+- Membandingkan endpoint **Yellowstone gRPC** berdasarkan latency connect, waktu
+  ke event pertama, dan kesegaran slot untuk sebuah profil beban kerja lewat
+  `sol-doctor grpc compare`.
 - Menghasilkan output terminal yang mudah dibaca, JSON, dan laporan Markdown.
 
 Tool ini local-first dan ringan dependensi: HTTP JSON-RPC via `reqwest`,
@@ -202,6 +205,15 @@ Periksa kesiapan Yellowstone gRPC:
 sol-doctor grpc check --grpc https://example-yellowstone-endpoint
 ```
 
+Bandingkan beberapa endpoint Yellowstone gRPC:
+
+```bash
+sol-doctor grpc compare \
+  --grpc https://example-yellowstone-a \
+  --grpc https://example-yellowstone-b \
+  --profile latency
+```
+
 Output JSON (machine-readable, untuk CI):
 
 ```bash
@@ -225,6 +237,7 @@ untuk contoh output terminal dan laporan Markdown.
 | Keamanan jaringan | menolak perbandingan lintas-jaringan berdasarkan genesis hash |
 | WebSocket | derivasi URL, connect, `slotSubscribe`/`logsSubscribe`, notifikasi pertama, reconnect, unsubscribe, close |
 | Yellowstone gRPC | connect + TLS/HTTP-2, auth `x-token` opsional, unary probe (`Ping`/`GetVersion`/`GetSlot`/`GetBlockHeight`/`GetLatestBlockhash`/`IsBlockhashValid`), first-event stream slot-only, cross-check slot HTTP RPC opsional |
+| Yellowstone gRPC compare | rank endpoint berdasarkan verdict, latency connect, waktu ke event pertama, kesegaran slot, dan stabilitas stream untuk profil `general`/`latency`/`indexer`, dengan pemasangan env `x-token` per-endpoint |
 | Keamanan output | meredaksi kredensial dan kemungkinan API key di terminal, JSON, Markdown, dan error |
 
 ## Profil Workload
@@ -537,6 +550,55 @@ Tip: run with --verbose to see full details.
 Kode exit mengikuti pemetaan yang sama dengan command lain (lihat
 [Kode Exit](#kode-exit)): `0` GOOD, `1` WARNING, `2` BAD, `3` UNKNOWN/error.
 
+### Perbandingan Yellowstone gRPC
+
+Rank dua atau lebih endpoint Yellowstone gRPC untuk sebuah beban kerja, seperti
+`compare` me-rank endpoint HTTP RPC. Tiap endpoint menjalankan probe `grpc check`
+yang sama (aman, slot-only) secara **konkuren**, lalu diberi skor dan di-rank
+berdasarkan verdict, latency connect, waktu ke update slot pertama, kesegaran
+slot, dan stabilitas stream:
+
+```bash
+sol-doctor grpc compare \
+  --grpc https://example-yellowstone-a \
+  --grpc https://example-yellowstone-b \
+  --profile latency
+```
+
+Sebagian besar endpoint butuh `x-token`, dan provider berbeda pakai token
+berbeda. Pasangkan tiap token dengan endpoint-nya dengan memberi `--x-token-env`
+satu kali per `--grpc`, dengan urutan yang sama. Seperti `grpc check`, token
+dibaca **hanya** dari variabel lingkungan — tidak pernah dari command line — dan
+tidak pernah dicetak, diserialisasi, atau dicatat:
+
+```bash
+export YELLOWSTONE_A_TOKEN="token-untuk-a"
+export YELLOWSTONE_B_TOKEN="token-untuk-b"
+
+sol-doctor grpc compare \
+  --grpc https://example-yellowstone-a --x-token-env YELLOWSTONE_A_TOKEN \
+  --grpc https://example-yellowstone-b --x-token-env YELLOWSTONE_B_TOKEN \
+  --profile indexer
+```
+
+Beri `--x-token-env` **nol** (semua anonim), **sekali** (satu token dipakai semua
+endpoint), atau **sekali per endpoint** (dipasangkan per posisi). Jumlah lain
+ditolak.
+
+| Profil | Dioptimalkan untuk |
+| --- | --- |
+| `general` | Seimbang antara connect, event pertama, dan kesegaran slot. |
+| `latency` | Bot/MEV: latency connect dan waktu ke update slot pertama. |
+| `indexer` | Indexer: kesegaran slot dan stabilitas stream slot. |
+
+`grpc compare` menghasilkan output manusia ringkas / `--verbose`, `--json` (dengan
+`schema_version`), dan laporan Markdown `--report <PATH>`. Ia subscribe **hanya**
+ke slot dan merupakan diagnostik point-in-time, bukan benchmark. Karena Yellowstone
+gRPC tidak mengekspos genesis hash, `grpc compare` tidak bisa mendeteksi
+perbandingan lintas-jaringan seperti `compare` HTTP — bandingkan endpoint pada
+jaringan Solana yang **sama**, dan kesegaran slot di-rank relatif terhadap
+endpoint paling segar yang teramati.
+
 ### Output berwarna
 
 Output human diberi warna ketika stdout adalah terminal. Warnanya **semantik**:
@@ -808,9 +870,11 @@ reproducible.
 
 - `check` dan `compare` memakai HTTP JSON-RPC; `sol-doctor ws` mencakup kesiapan
   subscription slot dan logs (belum ada subscription account/program).
-- `grpc check` adalah pemeriksaan kesiapan satu endpoint yang subscribe **hanya**
-  ke slot; perbandingan endpoint gRPC dan diagnostik subscription lain belum
-  termasuk. Ini diagnostik point-in-time, bukan benchmark atau SLA.
+- `grpc check` (satu endpoint) dan `grpc compare` (rank multi-endpoint) subscribe
+  **hanya** ke slot; diagnostik subscription lain belum termasuk. Keduanya
+  diagnostik point-in-time, bukan benchmark atau SLA. `grpc compare` tidak bisa
+  mendeteksi perbandingan lintas-jaringan (gRPC tidak mengekspos genesis hash),
+  jadi bandingkan endpoint pada jaringan Solana yang sama.
 - Skor adalah heuristik deterministik, bukan jaminan provider.
 - Ini CLI local-first, bukan layanan monitoring terhosting.
 - Kesiapan token memastikan akun program SPL Token dan Token-2022 disajikan;
@@ -871,6 +935,9 @@ ruang lingkup.
 
 **Baru saja dirilis**
 
+- **Perbandingan endpoint Yellowstone gRPC** (`grpc compare`) — rank endpoint
+  gRPC berdasarkan latency connect, waktu ke event pertama, dan kesegaran slot
+  untuk sebuah profil beban kerja.
 - **Pemeriksaan kesiapan Yellowstone gRPC** (`grpc check`).
 - Mode sampling berulang (`--samples`) dengan persentil latency p50/p95.
 - Pemeriksaan kesiapan SPL Token dan Token-2022.
@@ -879,9 +946,8 @@ ruang lingkup.
 
 **Jangka dekat**
 
-- Perbandingan endpoint Yellowstone gRPC (rank beberapa endpoint gRPC).
-- Laporan Markdown untuk `check` (saat ini hanya `compare` dan `grpc check` yang
-  menghasilkannya) dan template laporan yang lebih kaya.
+- Laporan Markdown untuk `check` (saat ini `compare`, `grpc check`, dan
+  `grpc compare` menghasilkannya) dan template laporan yang lebih kaya.
 - Lebih banyak contoh laporan dan dokumentasi terlokalisasi.
 
 **Nanti**

@@ -91,6 +91,22 @@ async fn run() -> anyhow::Result<i32> {
                 }
                 Ok(result.verdict.exit_code())
             }
+            GrpcCommand::Compare(compare_args) => {
+                let json = compare_args.json;
+                let markdown_report = compare_args.report.clone();
+                let result = grpc::compare::run_grpc_compare(compare_args).await?;
+                if let Some(path) = markdown_report {
+                    grpc::compare::write_markdown_report(&result, &path)?;
+                }
+                if json {
+                    println!("{}", grpc::compare::render_json(&result)?);
+                } else {
+                    print!("{}", grpc::compare::render_human(&result, palette, verbose));
+                }
+                // A gRPC comparison always produces a ranking, so it exits 0; the
+                // per-endpoint verdicts are in the report.
+                Ok(0)
+            }
         },
     }
 }
