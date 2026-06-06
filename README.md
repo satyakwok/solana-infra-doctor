@@ -882,12 +882,16 @@ is mocked or fabricated. Full matrix, exact commands, and timestamps:
 | HTTP `compare` (+ `--data`, `--report`) | ✅ | [`compare-mainnet-publicnode.txt`](examples/terminal/compare-mainnet-publicnode.txt), [`compare-data-indexer.txt`](examples/terminal/compare-data-indexer.txt), [report](examples/reports/compare-indexer-data-live.md) |
 | WebSocket `ws` (slot + logs) | ✅ | [`ws-mainnet.txt`](examples/terminal/ws-mainnet.txt), [`ws-logs-mainnet.txt`](examples/terminal/ws-logs-mainnet.txt) |
 | GitHub Action `@v1` | ✅ (CI) | [`action-selftest.yml`](.github/workflows/action-selftest.yml) |
-| Yellowstone `grpc check` / `grpc compare` | ⛔ Blocked | [blocked: private credentials required](examples/terminal/grpc-check-blocked-private-endpoint-required.txt) |
+| Yellowstone `grpc check` | ✅ Tatum mainnet (**degraded**) | [`grpc-check-real-mainnet-tatum-redacted.txt`](examples/terminal/grpc-check-real-mainnet-tatum-redacted.txt), [report](examples/reports/grpc-check-real-mainnet-tatum-redacted.md), [details](docs/audit/grpc-real-run.md) |
+| Yellowstone `grpc compare` | ⛔ Blocked | [needs multiple credentialed endpoints](examples/terminal/grpc-compare-blocked-private-endpoint-required.txt) |
 
-**All public-endpoint features have successful real-run evidence. Yellowstone
-gRPC is implemented but blocked from a public real run because every provider
-requires a private `x-token`** — run it with your own endpoint and token (see the
-evidence note above).
+Core public HTTP/WebSocket checks are backed by real public-endpoint runs.
+**Yellowstone `grpc check` is backed by a real credentialed Tatum mainnet run,
+currently documented as degraded** — the endpoint accepted authentication and
+returned live slot data, but did not produce a ready slot stream and rate-limited
+some unary methods (429). `grpc compare` still requires multiple credentialed
+endpoints. This is not a claim that gRPC is fully healthy or that all gRPC checks
+passed. Full matrix: [`docs/audit/real-run-matrix.md`](docs/audit/real-run-matrix.md).
 
 ## Exit Codes
 

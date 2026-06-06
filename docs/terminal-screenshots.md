@@ -27,6 +27,27 @@ HTTP latency.
 
 ![sol-doctor compare](images/cli/terminal/compare.png)
 
+## `check --data` — data-readiness (getProgramAccounts + archival)
+
+`sol-doctor check --rpc https://api.mainnet-beta.solana.com --data`
+
+Adds a **Data** category for indexer/data-pipeline workloads: whether
+`getProgramAccounts` is enabled (probed on a small non-excluded program) and how
+deep the endpoint's archival history goes. The Data line is informational and
+does not by itself flip the verdict.
+
+![sol-doctor check --data](images/cli/terminal/check-data.png)
+
+## `compare --data` — indexer data-readiness ranking
+
+`sol-doctor compare --rpc … --rpc … --profile indexer --data --verbose`
+
+The `indexer` profile scores `getProgramAccounts` enablement and archival depth,
+so an endpoint that serves only recent history ranks lower for backfill-heavy
+indexer workloads even when both are otherwise healthy.
+
+![sol-doctor compare --data](images/cli/terminal/compare-data.png)
+
 ## `ws` — WebSocket realtime readiness
 
 `sol-doctor ws --rpc https://api.mainnet-beta.solana.com --verbose`

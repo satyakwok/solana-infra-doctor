@@ -113,6 +113,30 @@ write a shareable Markdown report. It contains no ANSI codes, applies the same
 redaction, and is meant to be attached to a PR, ticket, or email. The gRPC report
 carries a point-in-time diagnostic disclaimer.
 
+## Data-readiness output (`--data`)
+
+`sol-doctor check --data` adds a **Data** category for indexer and data-pipeline
+workloads, surfaced as a `Data` roll-up line (e.g. `getProgramAccounts ready ·
+history full (from genesis)`) and two checks:
+
+- **`getProgramAccounts` enablement** — probed against a small, non-excluded
+  program (`ComputeBudget…` by default; override with `--data-program <PROGRAM>`
+  to test your own). Reported as `ready`, `gated` (the endpoint disables or
+  restricts `getProgramAccounts`), or `degraded` (the probe could not complete).
+  Large programs such as the SPL Token program are excluded from validator
+  secondary indexes on most providers, so they are intentionally *not* used as
+  the probe target.
+- **Archival history depth** — from `getFirstAvailableBlock`: `full (from
+  genesis)` when the oldest available slot is `0`, otherwise `from slot <N>`
+  (shallow/recent-only history), which matters for deep backfills.
+
+The Data category is **informational**: it does not by itself flip the overall
+`GOOD`/`WARNING`/`BAD` verdict, and its latency is excluded from the latency
+average. `sol-doctor compare --data` feeds the same signals into the `indexer`
+profile score, so endpoints that gate `getProgramAccounts` or serve only shallow
+history rank lower for indexer workloads (`--verbose` shows the per-endpoint
+`getProgramAccounts` and `Archival` rows).
+
 ## Yellowstone gRPC output (`grpc check`)
 
 `sol-doctor grpc check` uses the same output system as the other commands: a

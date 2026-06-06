@@ -1,0 +1,42 @@
+# sol-doctor real-run evidence (Yellowstone gRPC, real credentialed mainnet)
+# command:   ./target/release/sol-doctor grpc check --grpc $YELLOWSTONE_GRPC_ENDPOINT --x-token-env YELLOWSTONE_X_TOKEN --rpc https://api.mainnet-beta.solana.com --timeout-ms 30000 --duration 20000 --verbose
+# endpoint:  Tatum mainnet Yellowstone gRPC (https://solana-mainnet-grpc.gateway.tatum.io)
+# version:   sol-doctor 0.13.0 (commit 9721a7d)
+# captured:  2026-06-05T21:04:34Z (UTC)
+# redaction: x-token via env (--x-token-env); token never printed/committed.
+# ----------------------------------------------------------------------
+Solana Infra Doctor · Yellowstone gRPC Readiness
+
+Target
+Endpoint   https://solana-mainnet-grpc.gateway.tatum.io/
+RPC        https://api.mainnet-beta.solana.com/
+
+Result
+BAD       gRPC endpoint is reachable but the slot stream is not ready
+Connect   17 ms
+Unary     3 passed · 2 failed
+Stream    stream closed before a slot update
+
+Checks
+Category          Status    Summary
+Transport         PASS      Connected over TLS (HTTP/2)
+Authentication    PASS      Token accepted
+Unary             WARN      3 / 5 supported checks passed
+Stream            FAIL      stream closed before a slot update
+Cross-check       SKIP      no gRPC slot observed to compare
+
+Unary methods
+Method               Status   Latency   Detail
+Ping                 PASS     86 ms     pong
+GetVersion           PASS     11 ms     {"version":{"package":"yellowstone-grpc-geyser","version":"13.1.0+solana.4.0.0",…
+GetSlot              PASS     8 ms      slot 424537967
+GetBlockHeight       FAIL     5 ms      protocol error: received message with invalid compression flag: 123 (valid flags are 0 and 1) while receiving response with status: 429 Too Many Requests [internal]
+GetLatestBlockhash   FAIL     56 ms     protocol error: received message with invalid compression flag: 123 (valid flags are 0 and 1) while receiving response with status: 429 Too Many Requests [internal]
+IsBlockhashValid     SKIP               skipped (no blockhash from GetLatestBlockhash)
+
+Warnings
+- 2 unary method check(s) failed; the endpoint may have limited unary support
+
+Next checks
+- the slot stream did not become ready; compare against the HTTP RPC slot with --rpc and check server logs
+# exit: 2

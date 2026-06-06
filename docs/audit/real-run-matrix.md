@@ -22,8 +22,8 @@ in this repository is mocked, hand-edited, or fabricated.
 | `ws --subscription logs` | ✅ Yes | [`ws-logs-mainnet.txt`](../../examples/terminal/ws-logs-mainnet.txt) | logsSubscribe |
 | Redaction-safe output | ✅ Yes | all files above (public endpoints, no credentials) + redaction unit/integration tests | no secret printed |
 | GitHub Action (`@v1`) | ✅ Yes (CI) | [`.github/workflows/action-selftest.yml`](../../.github/workflows/action-selftest.yml) | CI runs the action against a public RPC on every push/PR |
-| Yellowstone **`grpc check`** | ⛔ Blocked | [`grpc-check-blocked-private-endpoint-required.txt`](../../examples/terminal/grpc-check-blocked-private-endpoint-required.txt) | implemented; needs a private `x-token` (no stable public no-token endpoint) |
-| Yellowstone **`grpc compare`** | ⛔ Blocked | same | implemented; needs private credentials |
+| Yellowstone **`grpc check`** | ✅ Yes — Tatum mainnet (**degraded**) | [`grpc-check-real-mainnet-tatum-redacted.txt`](../../examples/terminal/grpc-check-real-mainnet-tatum-redacted.txt) · [report](../../examples/reports/grpc-check-real-mainnet-tatum-redacted.md) · [details](grpc-real-run.md) | real credentialed run: transport/auth/ping/version/GetSlot PASS; stream FAIL; GetBlockHeight/GetLatestBlockhash rate-limited (429); no token leak |
+| Yellowstone **`grpc compare`** | ⛔ Blocked | [`grpc-compare-blocked-private-endpoint-required.txt`](../../examples/terminal/grpc-compare-blocked-private-endpoint-required.txt) | implemented; needs **multiple** credentialed endpoints/tokens (not available) |
 
 ## Notes on coverage
 
@@ -33,16 +33,22 @@ in this repository is mocked, hand-edited, or fabricated.
 - **Public-endpoint reality**: public RPCs may rate-limit rapid repeated probes.
   Any degraded result captured during evidence collection is a real public-endpoint
   condition, recorded honestly — not treated as a healthy example.
-- **gRPC**: every major Yellowstone provider requires a private `x-token`, and there
-  is no stable public no-token endpoint. The commands are documented with
-  redaction-safe usage; run them with your own endpoint and token (see the blocked
-  evidence file).
+- **gRPC `check`**: validated against a **real credentialed Tatum mainnet endpoint**
+  (`x-token` via `--x-token-env`). The run was **degraded** — transport, auth,
+  ping, version, and `GetSlot` passed, but the slot stream did not become ready and
+  two unary methods were rate-limited (429). See [`grpc-real-run.md`](grpc-real-run.md).
+  This proves `grpc check` can test a real credentialed endpoint and detect degraded
+  readiness; it does **not** prove the endpoint is fully healthy.
+- **gRPC `compare`**: still blocked — it ranks two or more endpoints and needs
+  multiple credentialed endpoints/tokens, which were not available.
 
 ## Honest claim
 
-**All public-endpoint features have successful real-run evidence. Yellowstone gRPC
-is implemented but blocked from a public real run because it requires private
-credentials.**
+**All public-endpoint features have successful real-run evidence. Yellowstone
+`grpc check` is backed by a real credentialed Tatum mainnet run, currently
+**degraded** (auth + live slot succeeded; slot stream not ready; some unary calls
+rate-limited). `grpc compare` remains blocked pending multiple credentialed
+endpoints.**
 
-This repository does **not** claim "all tools use real data" without qualification,
-because gRPC cannot be validated against a public endpoint.
+This repository does **not** claim that all gRPC checks passed, that gRPC is fully
+healthy, or that the Tatum endpoint is production-ready.

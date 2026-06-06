@@ -878,6 +878,20 @@ Laporan-laporan ini berguna sebagai sinyal kesiapan untuk perbandingan RPC,
 tinjauan kesiapan bot/indexer, diskusi CI, dan diagnostik bergaya konsultasi.
 Skornya adalah heuristik deterministik, bukan jaminan perilaku provider.
 
+## Bukti real-run
+
+Setiap fitur terdokumentasi dijalankan terhadap endpoint **nyata**, atau ditandai
+**blocked** karena butuh kredensial privat. Tidak ada output yang di-mock/dipalsukan.
+Matriks lengkap, perintah, dan timestamp: [`docs/audit/real-run-matrix.md`](docs/audit/real-run-matrix.md).
+
+- **HTTP `check`/`compare` + WebSocket `ws`**: ✅ run nyata ke endpoint publik
+  (mainnet/devnet/publicnode).
+- **GitHub Action `@v1`**: ✅ dijalankan di CI terhadap RPC publik.
+- **Yellowstone `grpc check`**: ✅ **run nyata berkredensial** ke Tatum mainnet —
+  saat ini **degraded** (auth + slot live berhasil; slot stream belum ready;
+  beberapa unary kena rate-limit 429). Bukan klaim bahwa gRPC sepenuhnya sehat.
+- **Yellowstone `grpc compare`**: ⛔ blocked — butuh beberapa endpoint berkredensial.
+
 ## Kode Exit
 
 | Kode | Verdict | Arti |

@@ -1,0 +1,21 @@
+# sol-doctor Yellowstone `grpc compare` — BLOCKED_PRIVATE_CREDENTIALS_REQUIRED
+# version:   sol-doctor 0.13.0
+#
+# `grpc check` is NOT blocked: it is backed by a real credentialed Tatum mainnet
+# run (degraded). See docs/audit/grpc-real-run.md and the redacted evidence at
+# grpc-check-real-mainnet-tatum-redacted.txt / -retry.txt.
+#
+# `grpc compare` ranks two or more endpoints and requires MULTIPLE credentialed
+# Yellowstone endpoints/tokens at once, which were not available — so it has no
+# real run yet and is BLOCKED (implemented, not faked). Tatum offers Yellowstone
+# gRPC on mainnet only, so a single credential cannot exercise a comparison.
+#
+# Run it yourself (tokens read ONLY from env vars, never the command line, never
+# printed/serialized/logged):
+#
+#   sol-doctor grpc compare \
+#     --grpc https://endpoint-a --x-token-env YELLOWSTONE_A_TOKEN \
+#     --grpc https://endpoint-b --x-token-env YELLOWSTONE_B_TOKEN \
+#     --profile latency
+#
+# Status: BLOCKED_PRIVATE_CREDENTIALS_REQUIRED.
