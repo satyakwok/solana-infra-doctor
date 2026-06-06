@@ -281,6 +281,7 @@ mod tests {
 
     fn report() -> CheckReport {
         CheckReport {
+            schema_version: 1,
             verdict: Verdict::Good,
             rpc_url: "https://api.mainnet-beta.solana.com/".to_string(),
             summary: "all RPC readiness checks succeeded".to_string(),

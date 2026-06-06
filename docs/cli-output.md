@@ -106,6 +106,10 @@ Two distinct vocabularies are used consistently:
 human-only layout, applies the same redaction as human output, and keeps a
 stable field shape. Prefer it for any programmatic use, CI gates, or alerting.
 
+Every `--json` payload (`check`, `compare`, `ws`, and `grpc`) carries a top-level
+`schema_version` (currently `1`), bumped only on a backward-incompatible field
+change, so consumers can pin or branch on it.
+
 ## Markdown report
 
 `sol-doctor compare --report <path>` and `sol-doctor grpc check --report <path>`

@@ -1,16 +1,17 @@
 # sol-doctor real-run evidence (JSON output)
-# command:   ./target/release/sol-doctor check --rpc https://api.mainnet-beta.solana.com --json
+# command:   sol-doctor check --rpc https://api.mainnet-beta.solana.com --json
 # endpoint:  api.mainnet-beta.solana.com (public mainnet)
-# version:   sol-doctor 0.13.0 (commit b3f771f)
-# captured:  2026-06-05T20:33:13Z (UTC)
+# version:   sol-doctor 0.14.0 (commit c330512, pre-release working tree)
+# captured:  2026-06-06T00:54:26Z (UTC)
 # ----------------------------------------------------------------------
 {
+  "schema_version": 1,
   "verdict": "GOOD",
   "rpc_url": "https://api.mainnet-beta.solana.com/",
   "summary": "All RPC readiness checks passed",
-  "average_latency_ms": 6,
+  "average_latency_ms": 9,
   "latency_samples": null,
-  "block_time_lag_secs": 14,
+  "block_time_lag_secs": 13,
   "prioritization_fee_median": 0,
   "token_program_ready": true,
   "token_2022_ready": true,
@@ -20,7 +21,7 @@
       "category": "core",
       "method": "getHealth",
       "status": "success",
-      "latency_ms": 25,
+      "latency_ms": 27,
       "detail": "health is ok",
       "error_kind": null,
       "critical": true
@@ -29,7 +30,7 @@
       "category": "core",
       "method": "getVersion",
       "status": "success",
-      "latency_ms": 4,
+      "latency_ms": 11,
       "detail": "solana-core 4.0.0",
       "error_kind": null,
       "critical": true
@@ -47,8 +48,8 @@
       "category": "core",
       "method": "getSlot",
       "status": "success",
-      "latency_ms": 3,
-      "detail": "slot 424533219",
+      "latency_ms": 9,
+      "detail": "slot 424572558",
       "error_kind": null,
       "critical": true
     },
@@ -56,8 +57,8 @@
       "category": "blockhash",
       "method": "getLatestBlockhash",
       "status": "success",
-      "latency_ms": 3,
-      "detail": "81pbB7YMSDyxLEEeVoefU7yQU9vivCyvbJQbqqW8yH5E",
+      "latency_ms": 8,
+      "detail": "GEwyutQn62pAcUkcUoZfYv4TB8pa2rxKzBPkAwda6C8a",
       "error_kind": null,
       "critical": true
     },
@@ -65,7 +66,7 @@
       "category": "blockhash",
       "method": "isBlockhashValid",
       "status": "success",
-      "latency_ms": 4,
+      "latency_ms": 9,
       "detail": "latest blockhash is valid",
       "error_kind": null,
       "critical": true
@@ -74,8 +75,8 @@
       "category": "performance",
       "method": "getRecentPerformanceSamples",
       "status": "success",
-      "latency_ms": 8,
-      "detail": "238391 transactions across 149 slots in 60s",
+      "latency_ms": 20,
+      "detail": "165675 transactions across 149 slots in 60s",
       "error_kind": null,
       "critical": false
     },
@@ -83,8 +84,8 @@
       "category": "performance",
       "method": "getBlockTime",
       "status": "success",
-      "latency_ms": 4,
-      "detail": "finalized block time 14s behind wall clock",
+      "latency_ms": 2,
+      "detail": "finalized block time 13s behind wall clock",
       "error_kind": null,
       "critical": false
     },
@@ -92,7 +93,7 @@
       "category": "performance",
       "method": "getRecentPrioritizationFees",
       "status": "success",
-      "latency_ms": 4,
+      "latency_ms": 5,
       "detail": "median priority fee 0 micro-lamports/CU (max 0)",
       "error_kind": null,
       "critical": false
@@ -101,7 +102,7 @@
       "category": "token",
       "method": "getAccountInfo",
       "status": "success",
-      "latency_ms": 3,
+      "latency_ms": 2,
       "detail": "Token Program ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111",
       "error_kind": null,
       "critical": false
@@ -110,7 +111,7 @@
       "category": "token",
       "method": "getAccountInfo",
       "status": "success",
-      "latency_ms": 5,
+      "latency_ms": 3,
       "detail": "Token-2022 ready: executable 36-byte program owned by BPFLoaderUpgradeab1e11111111111111111111111",
       "error_kind": null,
       "critical": false

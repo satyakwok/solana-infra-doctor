@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.14.0 - Unreleased
+
+### Added
+- A top-level **`schema_version`** field on `check`, `compare`, and `ws` JSON
+  output (previously only on the Yellowstone gRPC JSON), so every `--json`
+  payload is versioned for forward-compatible consumption.
+
+### Documentation / metadata
+- Document the data-readiness (`--data`) output and add real terminal
+  screenshots for `check --data` and `compare --data`.
+- Add `homepage` and `documentation` to the crate metadata; correct the
+  resilience module doc (HTTP 5xx is not retried — only timeouts, connection
+  errors, and 429).
+
 ## 0.13.0 - 2026-06-05
 
 - Add **`sol-doctor compare --data`**: run the data-readiness checks across every

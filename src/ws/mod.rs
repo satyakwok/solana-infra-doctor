@@ -32,10 +32,16 @@ const UNSUBSCRIBE_ACK_MS: u64 = 1_000;
 /// How many times to reconnect after a failed or dropped attempt before giving up.
 const MAX_RECONNECTS: u32 = 3;
 
+/// Schema version for the `ws --json` result shape. Bump on any
+/// backward-incompatible change to the serialized fields.
+pub const WS_SCHEMA_VERSION: u32 = 1;
+
 /// The result of a WebSocket readiness diagnostic. This is the serialized shape
 /// emitted by `--json`.
 #[derive(Debug, Clone, Serialize)]
 pub struct WsReport {
+    /// Schema version for the result shape (see [`WS_SCHEMA_VERSION`]).
+    pub schema_version: u32,
     /// Overall readiness verdict (drives the process exit code).
     pub verdict: Verdict,
     /// The redacted RPC URL the WebSocket URL was derived from.
@@ -70,6 +76,7 @@ pub struct WsReport {
 impl WsReport {
     fn new(rpc_url: String, ws_url: String) -> Self {
         Self {
+            schema_version: WS_SCHEMA_VERSION,
             verdict: Verdict::Unknown,
             rpc_url,
             ws_url,

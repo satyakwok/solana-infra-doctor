@@ -468,6 +468,7 @@ fn verdict_latency_and_report_helpers_are_covered() {
     assert_eq!(average_latency_ms([]), None);
 
     let report = solana_infra_doctor::checks::CheckReport {
+        schema_version: 1,
         verdict: Verdict::Warning,
         rpc_url: "https://api.mainnet-beta.solana.com/".to_string(),
         summary: "RPC checks succeeded, but average latency is elevated at 600ms".to_string(),
@@ -499,6 +500,7 @@ fn verdict_latency_and_report_helpers_are_covered() {
 
     let json = render_json(&report).unwrap();
     assert!(json.contains("\"verdict\": \"WARNING\""));
+    assert!(json.contains("\"schema_version\": 1"));
     solana_infra_doctor::report::print_json(&report).unwrap();
 
     assert_eq!(ErrorKind::InvalidUrl.label(), "invalid_url");
@@ -639,6 +641,7 @@ fn compare_check_report(
     });
 
     solana_infra_doctor::checks::CheckReport {
+        schema_version: 1,
         verdict,
         rpc_url: url.to_string(),
         summary: verdict.to_string(),
@@ -907,6 +910,7 @@ fn compare_json_markdown_and_human_outputs_have_required_shape() {
     let json = render_compare_json(&report).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["profile"], "bot");
+    assert_eq!(parsed["schema_version"], 1);
     assert_eq!(parsed["best_endpoint_index"], 1);
     assert_eq!(parsed["worst_endpoint_index"], 2);
     assert!(parsed["endpoints"].is_array());
@@ -1278,6 +1282,7 @@ async fn ws_happy_path_reports_good() {
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["verdict"], "GOOD");
     assert_eq!(parsed["first_slot"], 424_000_000);
+    assert_eq!(parsed["schema_version"], 1);
     assert_eq!(parsed["subscription_method"], "slotSubscribe");
 }
 
@@ -1401,6 +1406,7 @@ fn ws_url_derivation_and_redaction() {
 #[test]
 fn ws_classify_covers_warning_and_bad_branches() {
     let base = WsReport {
+        schema_version: 1,
         verdict: Verdict::Unknown,
         rpc_url: "https://example.com/".to_string(),
         ws_url: "wss://example.com/".to_string(),
@@ -1470,6 +1476,7 @@ async fn ws_ignores_non_text_frames_before_notification() {
 #[test]
 fn ws_render_human_shows_degraded_steps_and_notes() {
     let degraded = WsReport {
+        schema_version: 1,
         verdict: Verdict::Warning,
         rpc_url: "https://example.com/".to_string(),
         ws_url: "wss://example.com/".to_string(),
@@ -1699,6 +1706,7 @@ fn colored_human_output_is_semantic_and_disabled_is_byte_identical() {
 
     // --- ws (a passing and a failing step, plus notes) ---
     let ws = WsReport {
+        schema_version: 1,
         verdict: Verdict::Warning,
         rpc_url: "https://example.com/".to_string(),
         ws_url: "wss://example.com/".to_string(),
@@ -1887,6 +1895,7 @@ fn verdict_summary_and_threshold_branches() {
 #[test]
 fn ws_verbose_shows_full_rpc_url() {
     let report = WsReport {
+        schema_version: 1,
         verdict: Verdict::Good,
         rpc_url: "https://api.mainnet-beta.solana.com/".to_string(),
         ws_url: "wss://api.mainnet-beta.solana.com/".to_string(),
@@ -1915,6 +1924,7 @@ fn compare_recommendation_falls_back_when_best_index_has_no_endpoint() {
     // A defensive path: a best index that does not match any endpoint falls back
     // to printing the bare index.
     let report = CompareReport {
+        schema_version: 1,
         profile: CompareProfileSummary::Bot,
         endpoints: vec![CompareEndpoint {
             index: 1,
@@ -2010,6 +2020,7 @@ fn human_output_columns_align_with_and_without_color() {
         ],
     );
     let ws = WsReport {
+        schema_version: 1,
         verdict: Verdict::Good,
         rpc_url: "https://api.mainnet-beta.solana.com/".to_string(),
         ws_url: "wss://api.mainnet-beta.solana.com/".to_string(),

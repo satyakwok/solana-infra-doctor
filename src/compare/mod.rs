@@ -19,10 +19,16 @@ pub use scoring::*;
 const MISMATCH_REASON: &str =
     "Endpoints returned different genesis hashes, indicating different Solana networks.";
 
+/// Schema version for the `compare --json` result shape. Bump on any
+/// backward-incompatible change to the serialized fields.
+pub const COMPARE_SCHEMA_VERSION: u32 = 1;
+
 /// The full result of comparing multiple RPC endpoints. This is the serialized
 /// shape emitted by `--json`.
 #[derive(Debug, Clone, Serialize)]
 pub struct CompareReport {
+    /// Schema version for the result shape (see [`COMPARE_SCHEMA_VERSION`]).
+    pub schema_version: u32,
     /// The workload profile used for scoring.
     pub profile: CompareProfileSummary,
     /// Per-endpoint results, in the order the endpoints were supplied.
@@ -183,6 +189,7 @@ pub fn build_compare_report(profile: CompareProfile, reports: &[CheckReport]) ->
 
     if network_mismatch {
         return CompareReport {
+            schema_version: COMPARE_SCHEMA_VERSION,
             profile: profile.into(),
             endpoints,
             best_endpoint_index: None,
@@ -211,6 +218,7 @@ pub fn build_compare_report(profile: CompareProfile, reports: &[CheckReport]) ->
     );
 
     CompareReport {
+        schema_version: COMPARE_SCHEMA_VERSION,
         profile: profile.into(),
         endpoints,
         best_endpoint_index: Some(best_endpoint_index),

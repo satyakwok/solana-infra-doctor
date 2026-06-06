@@ -20,10 +20,16 @@ pub mod verdict;
 pub use verdict::calculate_verdict;
 use verdict::summarize;
 
+/// Schema version for the `check --json` result shape. Bump on any
+/// backward-incompatible change to the serialized fields.
+pub const CHECK_SCHEMA_VERSION: u32 = 1;
+
 /// The full result of diagnosing a single RPC endpoint. This is the serialized
 /// shape emitted by `--json`.
 #[derive(Debug, Clone, Serialize)]
 pub struct CheckReport {
+    /// Schema version for the result shape (see [`CHECK_SCHEMA_VERSION`]).
+    pub schema_version: u32,
     /// Overall readiness verdict (drives the process exit code).
     pub verdict: Verdict,
     /// The redacted RPC URL that was diagnosed.
@@ -208,6 +214,7 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
         Err(AppError::InvalidRpcUrl { reason }) => {
             let reason = crate::redact::redact_text(&reason);
             return Ok(CheckReport {
+                schema_version: CHECK_SCHEMA_VERSION,
                 verdict: Verdict::Bad,
                 rpc_url: "<invalid>".to_string(),
                 summary: format!("invalid RPC URL: {reason}"),
@@ -298,6 +305,7 @@ pub async fn run_check(args: CheckArgs) -> Result<CheckReport, AppError> {
     let summary = summarize(verdict, &checks, average_latency_ms, args.fail_on_warning);
 
     Ok(CheckReport {
+        schema_version: CHECK_SCHEMA_VERSION,
         verdict,
         rpc_url: redacted_rpc_url,
         summary,

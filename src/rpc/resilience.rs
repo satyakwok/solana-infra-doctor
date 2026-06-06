@@ -3,7 +3,8 @@
 //! - a **token-bucket rate limiter** ([`reliakit_ratelimit`]) so we stay polite
 //!   toward public RPCs (important when `--samples` fans out many calls), and
 //! - **exponential backoff retry** ([`reliakit_backoff`]) on transient failures
-//!   (timeouts, connection errors, HTTP 429 / 5xx).
+//!   (timeouts, connection errors, and HTTP 429). Other 4xx/5xx responses are
+//!   treated as application-level errors and fail fast (see [`is_transient`]).
 //!
 //! Both reliakit crates are `no_std` and clock-agnostic — they compute durations
 //! and bucket state but never sleep. This module drives their clocks with
