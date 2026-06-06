@@ -48,6 +48,19 @@ indexer workloads even when both are otherwise healthy.
 
 ![sol-doctor compare --data](images/cli/terminal/compare-data.png)
 
+## `compare` — three public providers (`bot` profile)
+
+`sol-doctor compare --rpc … --rpc … --rpc … --profile bot --verbose`
+
+A point-in-time run against three **public, no-auth** endpoints (Solana
+Foundation, PublicNode, Lava). The lowest-latency endpoint is not the winner: for
+`bot`, slot freshness outweighs raw latency. **Example output, not an authoritative
+ranking** — latency and freshness vary by time, region, and load; re-run to
+reproduce. The full report is in
+[`examples/reports/rpc-comparison-multi-provider.md`](../examples/reports/rpc-comparison-multi-provider.md).
+
+![sol-doctor compare across three public providers](images/cli/terminal/compare-multi-provider.png)
+
 ## `ws` — WebSocket realtime readiness
 
 `sol-doctor ws --rpc https://api.mainnet-beta.solana.com --verbose`
