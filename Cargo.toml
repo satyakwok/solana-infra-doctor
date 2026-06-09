@@ -34,7 +34,7 @@ pkg-fmt = "zip"
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
-reliakit-backoff = "0.1.1"
+reliakit-backoff = "0.1.4"
 reliakit-ratelimit = "0.1.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 prost = "0.14"
