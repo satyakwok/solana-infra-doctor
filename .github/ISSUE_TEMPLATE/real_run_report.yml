@@ -1,0 +1,53 @@
+name: Real-run report
+description: Share a real sol-doctor run against an endpoint (helps validate the tool)
+title: "[real-run] "
+labels: ["real-run", "help wanted"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Real runs against real endpoints make the tool more trustworthy. **Redaction is
+        critical here:** never paste a private RPC/gRPC URL, API key, or `x-token`.
+        `sol-doctor` redacts URLs in its output; for gRPC, always pass the token via
+        `--x-token-env`, never on the command line. See
+        [real-run evidence](../../docs/contributing/real-run-evidence.md).
+  - type: dropdown
+    id: command
+    attributes:
+      label: Which command
+      options:
+        - check
+        - compare
+        - ws
+        - grpc check
+        - grpc compare
+    validations:
+      required: true
+  - type: input
+    id: endpoint-type
+    attributes:
+      label: Endpoint type
+      description: Public name, or "private (redacted)" — do NOT paste the private URL.
+      placeholder: "public: api.mainnet-beta.solana.com  |  or: private provider (redacted)"
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Redacted output
+      description: Paste the redaction-safe terminal or `--json` output.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: What looked right or wrong?
+      description: Did the verdict/score match your expectation? Any surprising classification?
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      options:
+        - label: I confirm there are no private URLs, API keys, or tokens in this report.
+          required: true

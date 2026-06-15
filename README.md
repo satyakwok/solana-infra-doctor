@@ -49,6 +49,21 @@ It is local-first and dependency-light: HTTP JSON-RPC via `reqwest`, WebSocket
 via `tokio-tungstenite`, and Yellowstone gRPC via `tonic` with the official
 `yellowstone-grpc-proto` definitions (no full Solana/Agave SDK).
 
+## Quickstart
+
+```bash
+cargo binstall solana-infra-doctor          # prebuilt binary, no compile
+# or: cargo install solana-infra-doctor
+
+sol-doctor check --rpc https://api.mainnet-beta.solana.com
+```
+
+Compare endpoints for your workload: `sol-doctor compare --rpc … --rpc … --profile bot`.
+**Why not just `ping`?** "It's up" doesn't tell you if it's *usable* — fresh slots,
+valid blockhashes, enabled `getProgramAccounts`, archival depth. That's what this
+measures. **Want to help?** See [Contributing](CONTRIBUTING.md) and
+[good first issues](docs/contributing/seed-issues.md).
+
 ## CLI Preview
 
 <p align="center">
@@ -1015,11 +1030,29 @@ boundaries.
 
 - Additional WebSocket subscriptions (account/program), beyond slot and logs.
 - Optional local benchmark history file.
-- A provider comparison playbook.
+- ~~A provider comparison playbook~~ — shipped (see [playbooks](docs/playbooks/)).
 
 **Not now**
 
 - Hosted dashboard, SaaS, user accounts, database, alerting, or a paid API.
+
+## Contributing
+
+Contributions are welcome — from typo fixes to new checks. Start here:
+
+- [Contributing guide](CONTRIBUTING.md) — setup, the gates every change must pass, and scope.
+- [Your first contribution](docs/contributing/first-contribution.md) — clone to PR in ~10 minutes.
+- [Good first issues & seed issues](docs/contributing/seed-issues.md) — pick something small.
+- Deep dives: [add a check](docs/contributing/add-a-check.md) ·
+  [add an example](docs/contributing/add-a-report-example.md) ·
+  [real-run evidence](docs/contributing/real-run-evidence.md).
+
+**Playbooks** — how to use it for a real workload:
+[bot](docs/playbooks/bot-rpc-readiness.md) ·
+[wallet / backend](docs/playbooks/wallet-backend-readiness.md) ·
+[indexer](docs/playbooks/indexer-readiness.md) ·
+[CI gate](docs/playbooks/ci-rpc-gate.md) ·
+[provider comparison](docs/playbooks/provider-comparison.md).
 
 ## License
 
