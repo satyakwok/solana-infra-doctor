@@ -1,0 +1,42 @@
+name: Good first issue (maintainer proposal)
+description: Scaffold a small, well-scoped task for a first-time contributor
+title: "[good first issue] "
+labels: ["good first issue", "help wanted"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this to write up a small, self-contained task someone can pick up without
+        deep context. Keep it scoped to a few files. See the
+        [seed issues](../../docs/contributing/seed-issues.md) for ready-made examples.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why this matters and where it lives (which file/module).
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: Task
+      description: The concrete change to make. Keep it small.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How we know it's done.
+      value: |
+        - [ ] Change implemented in the right module
+        - [ ] `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test --all-features` pass
+        - [ ] Tests added/updated; coverage stays at or above 95%
+        - [ ] Docs/README updated if user-facing
+    validations:
+      required: true
+  - type: textarea
+    id: pointers
+    attributes:
+      label: Pointers
+      description: Files to start from, related code, or a similar past change.

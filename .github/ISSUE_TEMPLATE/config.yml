@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/satyakwok/solana-infra-doctor/security/advisories/new
+    about: Please report security issues privately via a GitHub security advisory, not a public issue.
+  - name: Contributing guide
+    url: https://github.com/satyakwok/solana-infra-doctor/blob/main/CONTRIBUTING.md
+    about: How to set up, run, test, and where to start contributing.

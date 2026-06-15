@@ -1,0 +1,55 @@
+name: Bug report
+description: Something in sol-doctor behaves incorrectly or crashes
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. **Do not paste private RPC/gRPC URLs, API keys, or
+        tokens.** `sol-doctor` redacts them in its own output — please keep them out
+        of this issue too. Public endpoints (e.g. `api.mainnet-beta.solana.com`) are fine.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      description: The exact command, with any private URL/token redacted.
+      render: bash
+      placeholder: sol-doctor check --rpc https://api.mainnet-beta.solana.com --verbose
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Relevant output
+      description: Paste the relevant (already-redacted) terminal or JSON output.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: sol-doctor version
+      description: Output of `sol-doctor --version`.
+      placeholder: sol-doctor 0.14.0
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: OS / arch and install method
+      placeholder: "macOS arm64, cargo binstall"
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      options:
+        - label: I confirm this issue contains no private RPC URLs, API keys, or tokens.
+          required: true
