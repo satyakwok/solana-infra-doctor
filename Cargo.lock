@@ -1315,9 +1315,9 @@ checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
 name = "reliakit-backoff"
-version = "0.1.4"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1d9ade72ed35c926bca5d0b6dea2183e389d374d92cf18613188098ee30c524"
+checksum = "7abb85cc4c97776c7fdb2cbdcb817e01f89966f984772f1cfa9671f95919dba3"
 
 [[package]]
 name = "reliakit-ratelimit"
