@@ -52,3 +52,43 @@ jobs:
           name: rust-coverage
           fail_ci_if_error: true
           use_oidc: true
+
+  # Portability gate: the `rust` job above is the canonical fmt/clippy/coverage
+  # gate on Linux, so this only runs the test suite on the other two OSes we ship
+  # binaries for. The suite is hermetic (in-process mock servers), so no network.
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Test
+        run: cargo test
+
+  # Enforce the declared MSRV (Cargo.toml `rust-version`) so a dependency bump
+  # cannot silently raise it.
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust 1.88
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Check
+        run: cargo check --all-targets
