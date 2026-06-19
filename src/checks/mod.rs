@@ -1350,6 +1350,27 @@ mod tests {
     }
 
     #[test]
+    fn verdict_warning_for_data_probe_timeouts() {
+        // The two --data capability probes are informational; their timeouts must
+        // not escalate the verdict to BAD via the repeated-timeout rule (a slow or
+        // connection-refusing endpoint can surface both as timeouts).
+        let checks = vec![
+            success(CheckCategory::Core, "getHealth", 100),
+            failed(
+                CheckCategory::Data,
+                "getProgramAccounts",
+                ErrorKind::Timeout,
+            ),
+            failed(
+                CheckCategory::Data,
+                "getFirstAvailableBlock",
+                ErrorKind::Timeout,
+            ),
+        ];
+        assert_eq!(calculate_verdict(&checks, Some(100)), Verdict::Warning);
+    }
+
+    #[test]
     fn verdict_bad_for_high_latency() {
         let checks = vec![success(CheckCategory::Core, "getHealth", 2_000)];
         assert_eq!(calculate_verdict(&checks, Some(2_000)), Verdict::Bad);
