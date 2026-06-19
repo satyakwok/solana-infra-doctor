@@ -1,0 +1,15 @@
+# Configuration for the `typos` spell-checker CI job.
+#
+# Allowlisted words below are intentional, not misspellings:
+#   - `unparseable`: the spelling used throughout the URL/endpoint code and its
+#     tests (e.g. the `rejects_unparseable` test); a valid variant of
+#     "unparsable".
+#   - `PN`: a false positive from tokenising "PNGs" in the docs.
+[default.extend-words]
+unparseable = "unparseable"
+PN = "PN"
+
+# Translated docs are not English prose, so the English dictionary would flag
+# them. Exclude the Bahasa Indonesia README.
+[files]
+extend-exclude = ["*.id.md"]
