@@ -1,6 +1,6 @@
 //! Verdict calculation and human summary text for single-endpoint checks.
 
-use super::{CheckStatus, ErrorKind, RpcCheck};
+use super::{CheckCategory, CheckStatus, ErrorKind, RpcCheck};
 use crate::verdict::Verdict;
 
 const GOOD_AVERAGE_LATENCY_MS: u128 = 500;
@@ -19,9 +19,15 @@ pub fn calculate_verdict(checks: &[RpcCheck], average_latency_ms: Option<u128>) 
     let critical_failed = checks
         .iter()
         .any(|check| check.critical && check.status == CheckStatus::Failed);
+    // Informational data-capability probes (`--data`) do not, on their own, make
+    // an endpoint unusable, so their timeouts must not escalate the verdict to BAD
+    // (a slow endpoint can time out both probes; on some platforms a refused
+    // connection also surfaces as a timeout).
     let timeout_failures = checks
         .iter()
-        .filter(|check| check.error_kind == Some(ErrorKind::Timeout))
+        .filter(|check| {
+            check.category != CheckCategory::Data && check.error_kind == Some(ErrorKind::Timeout)
+        })
         .count();
     let invalid_url = checks
         .iter()
