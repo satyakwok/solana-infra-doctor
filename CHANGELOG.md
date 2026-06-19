@@ -1,4 +1,9 @@
 # Changelog
+## 0.14.1 - Unreleased
+
+### Documentation / metadata
+- List exit codes in `sol-doctor --help` so CI users see them without leaving the
+  terminal (`0` GOOD | `1` WARNING | `2` BAD | `3` UNKNOWN).
 
 ## 0.14.0 - 2026-06-06
 

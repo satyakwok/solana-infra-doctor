@@ -9,7 +9,8 @@ use std::path::PathBuf;
 #[command(
     name = "sol-doctor",
     version,
-    about = "A Rust CLI for Solana RPC production-readiness diagnostics, comparison, and WebSocket checks."
+    about = "A Rust CLI for Solana RPC production-readiness diagnostics, comparison, and WebSocket checks.",
+    after_help = "Exit codes: 0 GOOD | 1 WARNING | 2 BAD | 3 UNKNOWN"
 )]
 pub struct Cli {
     /// The subcommand to run.
