@@ -1,0 +1,36 @@
+name: Verified commits
+
+# Every commit in a pull request must be cryptographically signed and show as
+# "Verified" on GitHub. This keeps authorship on the history trustworthy. To
+# sign your commits, see:
+# https://docs.github.com/authentication/managing-commit-signature-verification
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  verified:
+    name: Verified commits
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Every commit in the pull request must be verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          unverified="$(gh api --paginate "repos/$REPO/pulls/$PR/commits" \
+            --jq '.[]
+                  | select(.commit.verification.verified == false)
+                  | "\(.sha[0:9])  \(.commit.message | split("\n")[0])  [\(.commit.verification.reason)]"')"
+          if [ -n "$unverified" ]; then
+            echo "::error::These commits are not verified — sign your commits (see this workflow's header for docs):"
+            echo "$unverified"
+            exit 1
+          fi
+          echo "All commits in the pull request are verified."
