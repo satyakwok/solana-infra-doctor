@@ -11,7 +11,7 @@
 //! environment variables named on the command line, paired by position with
 //! `--grpc`.
 
-use super::{run_grpc_check, AuthStatus, CheckStatus, GrpcReport};
+use super::{AuthStatus, CheckStatus, GrpcReport, run_grpc_check};
 use crate::{
     cli::{GrpcCheckArgs, GrpcCompareArgs, GrpcCompareProfile},
     error::AppError,

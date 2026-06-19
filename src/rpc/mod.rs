@@ -12,7 +12,7 @@ pub mod models;
 pub mod resilience;
 pub use models::*;
 
-use resilience::{is_transient, Resilience};
+use resilience::{Resilience, is_transient};
 
 /// A validated `http`/`https` RPC endpoint. Its `Debug` is redacted so credentials
 /// in the URL never leak through logging or panics.

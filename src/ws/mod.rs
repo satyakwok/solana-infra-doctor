@@ -20,7 +20,7 @@ use reliakit_backoff::Backoff;
 use serde::Serialize;
 use serde_json::Value;
 use std::time::Duration;
-use tokio::time::{timeout, Instant};
+use tokio::time::{Instant, timeout};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 pub mod analysis;

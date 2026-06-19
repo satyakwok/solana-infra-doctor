@@ -4,7 +4,7 @@
 use crate::{
     cli::CheckArgs,
     error::AppError,
-    latency::{average_latency_ms, Latency, LatencyStats},
+    latency::{Latency, LatencyStats, average_latency_ms},
     rpc::{
         AccountInfoResponse, BlockhashValidResponse, JsonRpcRequest, JsonRpcResponse,
         LatestBlockhashResponse, PerformanceSample, PrioritizationFee, RpcClient, RpcEndpoint,
@@ -567,14 +567,14 @@ async fn check_block_time(client: &RpcClient) -> (RpcCheck, Option<i64>) {
                         &response,
                     ),
                     None,
-                )
+                );
             }
         },
         Err(error) => {
             return (
                 failed_from_error(CheckCategory::Performance, METHOD, error),
                 None,
-            )
+            );
         }
     };
 
@@ -1145,15 +1145,19 @@ mod tests {
         assert!(report.average_latency_ms.is_some());
         assert!(report.token_program_ready);
         assert!(report.token_2022_ready);
-        assert!(report
-            .checks
-            .iter()
-            .any(|check| check.category == CheckCategory::Token
-                && check.detail.contains("Token Program ready")));
-        assert!(report
-            .checks
-            .iter()
-            .all(|check| check.status == CheckStatus::Success));
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.category == CheckCategory::Token
+                    && check.detail.contains("Token Program ready"))
+        );
+        assert!(
+            report
+                .checks
+                .iter()
+                .all(|check| check.status == CheckStatus::Success)
+        );
     }
 
     #[tokio::test]
@@ -1176,16 +1180,20 @@ mod tests {
         server.join();
 
         assert_eq!(report.verdict, Verdict::Bad);
-        assert!(report
-            .checks
-            .iter()
-            .any(|check| check.method == "getLatestBlockhash"
-                && check.error_kind == Some(ErrorKind::MalformedResponse)));
-        assert!(report
-            .checks
-            .iter()
-            .any(|check| check.method == "isBlockhashValid"
-                && check.detail == "latest blockhash unavailable"));
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.method == "getLatestBlockhash"
+                    && check.error_kind == Some(ErrorKind::MalformedResponse))
+        );
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.method == "isBlockhashValid"
+                    && check.detail == "latest blockhash unavailable")
+        );
     }
 
     #[tokio::test]

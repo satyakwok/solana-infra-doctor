@@ -76,12 +76,16 @@ mod tests {
 
     #[test]
     fn accepts_https_and_http() {
-        assert!(GrpcEndpoint::parse("https://grpc.example.com:443")
-            .unwrap()
-            .is_tls());
-        assert!(!GrpcEndpoint::parse("http://127.0.0.1:10000")
-            .unwrap()
-            .is_tls());
+        assert!(
+            GrpcEndpoint::parse("https://grpc.example.com:443")
+                .unwrap()
+                .is_tls()
+        );
+        assert!(
+            !GrpcEndpoint::parse("http://127.0.0.1:10000")
+                .unwrap()
+                .is_tls()
+        );
     }
 
     #[test]
@@ -111,9 +115,11 @@ mod tests {
     fn exposes_domain_and_target() {
         let endpoint = GrpcEndpoint::parse("https://grpc.example.com:443").unwrap();
         assert_eq!(endpoint.domain(), "grpc.example.com");
-        assert!(endpoint
-            .connect_target()
-            .starts_with("https://grpc.example.com"));
+        assert!(
+            endpoint
+                .connect_target()
+                .starts_with("https://grpc.example.com")
+        );
     }
 
     #[test]

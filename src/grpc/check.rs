@@ -4,20 +4,20 @@
 //! sends transactions, modifies state, or subscribes to broad filters.
 
 use super::{
-    error_kind::GrpcErrorKind, AuthStatus, CheckStatus, GrpcEndpoint, StreamResult, UnaryResult,
+    AuthStatus, CheckStatus, GrpcEndpoint, StreamResult, UnaryResult, error_kind::GrpcErrorKind,
 };
 use crate::redact;
 use futures_util::StreamExt;
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::time::{timeout, Instant};
+use tokio::time::{Instant, timeout};
 use tonic::metadata::{Ascii, MetadataValue};
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 use tonic::{Code, Request, Status};
 use yellowstone_grpc_proto::geyser::{
-    geyser_client::GeyserClient, subscribe_update::UpdateOneof, CommitmentLevel,
-    GetBlockHeightRequest, GetLatestBlockhashRequest, GetSlotRequest, GetVersionRequest,
-    IsBlockhashValidRequest, PingRequest, SubscribeRequest, SubscribeRequestFilterSlots,
+    CommitmentLevel, GetBlockHeightRequest, GetLatestBlockhashRequest, GetSlotRequest,
+    GetVersionRequest, IsBlockhashValidRequest, PingRequest, SubscribeRequest,
+    SubscribeRequestFilterSlots, geyser_client::GeyserClient, subscribe_update::UpdateOneof,
 };
 
 /// Stop observing the slot stream once this many updates confirm it is live,

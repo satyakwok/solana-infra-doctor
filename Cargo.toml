@@ -1,7 +1,7 @@
 [package]
 name = "solana-infra-doctor"
 version = "0.14.0"
-edition = "2021"
+edition = "2024"
 rust-version = "1.89"
 description = "A Rust CLI for Solana RPC and Yellowstone gRPC production-readiness diagnostics, comparison, and WebSocket checks."
 license = "MIT OR Apache-2.0"

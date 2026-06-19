@@ -1,16 +1,16 @@
 use solana_infra_doctor::{
     checks::{
-        calculate_verdict, run_check, verdict::summarize, CheckCategory, CheckStatus, ErrorKind,
-        RpcCheck,
+        CheckCategory, CheckStatus, ErrorKind, RpcCheck, calculate_verdict, run_check,
+        verdict::summarize,
     },
     cli::{CheckArgs, CompareArgs, CompareProfile, WsArgs},
     color::{ColorChoice, Palette},
     compare::{
-        build_compare_report, render_human as render_compare_human,
-        render_json as render_compare_json, render_markdown, run_compare, score_endpoint, slot_lag,
-        write_markdown_report, CompareEndpoint, CompareProfileSummary, CompareReport,
+        CompareEndpoint, CompareProfileSummary, CompareReport, build_compare_report,
+        render_human as render_compare_human, render_json as render_compare_json, render_markdown,
+        run_compare, score_endpoint, slot_lag, write_markdown_report,
     },
-    latency::{average_latency_ms, Latency, LatencyStats},
+    latency::{Latency, LatencyStats, average_latency_ms},
     redact::{redact_text, redact_url},
     report::{render_human, render_json},
     rpc::{
@@ -19,8 +19,8 @@ use solana_infra_doctor::{
     },
     verdict::Verdict,
     ws::{
-        classify, derive_ws_url, render_human as ws_render_human, render_json as ws_render_json,
-        run_ws, WsReport,
+        WsReport, classify, derive_ws_url, render_human as ws_render_human,
+        render_json as ws_render_json, run_ws,
     },
 };
 use std::{
@@ -240,10 +240,12 @@ async fn full_check_returns_good_for_healthy_rpc() {
     assert!(report.token_program_ready);
     assert!(report.token_2022_ready);
     assert!(report.average_latency_ms.is_some());
-    assert!(report
-        .checks
-        .iter()
-        .all(|check| check.status == CheckStatus::Success));
+    assert!(
+        report
+            .checks
+            .iter()
+            .all(|check| check.status == CheckStatus::Success)
+    );
 }
 
 #[tokio::test]
@@ -265,32 +267,42 @@ async fn full_check_reports_multiple_malformed_and_rpc_failures() {
     server.join();
 
     assert_eq!(report.verdict, Verdict::Bad);
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.detail == "unexpected health response: behind"));
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "getVersion" && check.detail == "missing result"));
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "getGenesisHash" && check.detail == "empty genesis hash"));
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.detail == "unexpected health response: behind")
+    );
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "getVersion" && check.detail == "missing result")
+    );
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "getGenesisHash" && check.detail == "empty genesis hash")
+    );
     assert!(report
         .checks
         .iter()
         .any(|check| check.method == "getSlot" && check.error_kind == Some(ErrorKind::RpcError)));
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "isBlockhashValid"
-            && check.detail == "latest blockhash unavailable"));
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "getRecentPerformanceSamples"
-            && check.detail == "no recent performance samples returned"));
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "isBlockhashValid"
+                && check.detail == "latest blockhash unavailable")
+    );
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "getRecentPerformanceSamples"
+                && check.detail == "no recent performance samples returned")
+    );
 }
 
 #[tokio::test]
@@ -310,29 +322,40 @@ async fn full_check_reports_rpc_error_bad_metadata_and_missing_results() {
     server.join();
 
     assert_eq!(report.verdict, Verdict::Bad);
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "getHealth" && check.error_kind == Some(ErrorKind::RpcError)));
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "getVersion"
-            && check.error_kind == Some(ErrorKind::MalformedResponse)
-            && check.detail.contains("expected JSON-RPC 2.0")));
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "getGenesisHash" && check.detail == "missing result"));
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "getLatestBlockhash" && check.detail == "missing result"));
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "getRecentPerformanceSamples"
-            && check.detail == "missing result"));
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "getHealth"
+                && check.error_kind == Some(ErrorKind::RpcError))
+    );
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "getVersion"
+                && check.error_kind == Some(ErrorKind::MalformedResponse)
+                && check.detail.contains("expected JSON-RPC 2.0"))
+    );
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "getGenesisHash" && check.detail == "missing result")
+    );
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "getLatestBlockhash" && check.detail == "missing result")
+    );
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "getRecentPerformanceSamples"
+                && check.detail == "missing result")
+    );
 }
 
 #[tokio::test]
@@ -351,17 +374,21 @@ async fn full_check_reports_invalid_blockhash_and_bad_response_metadata() {
     server.join();
 
     assert_eq!(report.verdict, Verdict::Bad);
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "isBlockhashValid"
-            && check.detail == "latest blockhash is not valid"));
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "getRecentPerformanceSamples"
-            && check.error_kind == Some(ErrorKind::MalformedResponse)
-            && check.detail.contains("expected response id 7")));
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "isBlockhashValid"
+                && check.detail == "latest blockhash is not valid")
+    );
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "getRecentPerformanceSamples"
+                && check.error_kind == Some(ErrorKind::MalformedResponse)
+                && check.detail.contains("expected response id 7"))
+    );
 }
 
 #[tokio::test]
@@ -380,10 +407,12 @@ async fn full_check_reports_missing_blockhash_valid_result() {
     server.join();
 
     assert_eq!(report.verdict, Verdict::Bad);
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "isBlockhashValid" && check.detail == "missing result"));
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "isBlockhashValid" && check.detail == "missing result")
+    );
 }
 
 #[tokio::test]
@@ -409,11 +438,13 @@ async fn full_check_classifies_http_and_decode_errors() {
             .any(|check| check.method == "getHealth"
                 && check.error_kind == Some(ErrorKind::HttpError))
     );
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.method == "getVersion"
-            && check.error_kind == Some(ErrorKind::MalformedResponse)));
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.method == "getVersion"
+                && check.error_kind == Some(ErrorKind::MalformedResponse))
+    );
 }
 
 #[tokio::test]
@@ -807,10 +838,12 @@ fn compare_profiles_apply_expected_adjustments_and_notes() {
             &[],
         )],
     );
-    assert!(wallet_report.endpoints[0]
-        .notes
-        .iter()
-        .any(|note| note.contains("blockhash")));
+    assert!(
+        wallet_report.endpoints[0]
+            .notes
+            .iter()
+            .any(|note| note.contains("blockhash"))
+    );
 
     let ci_report = build_compare_report(
         CompareProfile::Ci,
@@ -833,9 +866,11 @@ fn compare_profiles_apply_expected_adjustments_and_notes() {
             ),
         ],
     );
-    assert!(ci_report
-        .recommendation
-        .contains("WARNING or BAD endpoints are not recommended for pass gates"));
+    assert!(
+        ci_report
+            .recommendation
+            .contains("WARNING or BAD endpoints are not recommended for pass gates")
+    );
 
     let indexer_report = build_compare_report(
         CompareProfile::Indexer,
@@ -858,17 +893,23 @@ fn compare_profiles_apply_expected_adjustments_and_notes() {
             ),
         ],
     );
-    assert!(indexer_report
-        .recommendation
-        .contains("freshness-sensitive indexer workloads"));
-    assert!(indexer_report.endpoints[1]
-        .notes
-        .iter()
-        .any(|note| note.contains("performance samples")));
-    assert!(indexer_report.endpoints[1]
-        .notes
-        .iter()
-        .any(|note| note.contains("Slot lag")));
+    assert!(
+        indexer_report
+            .recommendation
+            .contains("freshness-sensitive indexer workloads")
+    );
+    assert!(
+        indexer_report.endpoints[1]
+            .notes
+            .iter()
+            .any(|note| note.contains("performance samples"))
+    );
+    assert!(
+        indexer_report.endpoints[1]
+            .notes
+            .iter()
+            .any(|note| note.contains("Slot lag"))
+    );
 }
 
 #[test]
@@ -976,10 +1017,12 @@ fn compare_tie_breakers_and_format_variants_are_covered() {
 
     assert_eq!(report.best_endpoint_index, Some(2));
     assert_eq!(report.worst_endpoint_index, Some(1));
-    assert!(report.endpoints[1]
-        .notes
-        .iter()
-        .any(|note| note.contains("core RPC methods")));
+    assert!(
+        report.endpoints[1]
+            .notes
+            .iter()
+            .any(|note| note.contains("core RPC methods"))
+    );
 
     let human = render_compare_human(&report, plain(), true);
     assert!(human.contains("Slot"));
@@ -1159,10 +1202,12 @@ async fn check_does_not_leak_secret_in_error_output() {
 
     assert_eq!(report.verdict, Verdict::Bad);
     assert!(!report.rpc_url.contains("FAKE_SECRET_123"));
-    assert!(report
-        .checks
-        .iter()
-        .all(|check| !check.detail.contains("FAKE_SECRET_123")));
+    assert!(
+        report
+            .checks
+            .iter()
+            .all(|check| !check.detail.contains("FAKE_SECRET_123"))
+    );
 
     // The secret must never appear in default human output, verbose human
     // output (which shows the full redacted URL), or JSON.
@@ -1381,17 +1426,21 @@ fn ws_url_derivation_and_redaction() {
     .unwrap();
     assert_eq!(override_ws.as_str(), "wss://realtime.example.com/feed");
 
-    assert!(derive_ws_url(
-        &Url::parse("https://example.com").unwrap(),
-        Some("https://not-websocket.example.com")
-    )
-    .is_err());
+    assert!(
+        derive_ws_url(
+            &Url::parse("https://example.com").unwrap(),
+            Some("https://not-websocket.example.com")
+        )
+        .is_err()
+    );
     // Unparseable override and a non-HTTP source scheme are both rejected.
-    assert!(derive_ws_url(
-        &Url::parse("https://example.com").unwrap(),
-        Some("not a url")
-    )
-    .is_err());
+    assert!(
+        derive_ws_url(
+            &Url::parse("https://example.com").unwrap(),
+            Some("not a url")
+        )
+        .is_err()
+    );
     assert!(derive_ws_url(&Url::parse("ftp://example.com").unwrap(), None).is_err());
 
     // Secrets in the derived WebSocket URL are redacted.
@@ -1547,10 +1596,12 @@ fn compare_rejects_mismatched_genesis_networks() {
     assert_eq!(report.best_endpoint_index, None);
     assert_eq!(report.worst_endpoint_index, None);
     assert!(report.mismatch_reason.is_some());
-    assert!(report
-        .endpoints
-        .iter()
-        .all(|endpoint| endpoint.slot_lag.is_none()));
+    assert!(
+        report
+            .endpoints
+            .iter()
+            .all(|endpoint| endpoint.slot_lag.is_none())
+    );
 
     let concise = render_compare_human(&report, plain(), false);
     assert!(concise.contains("different Solana networks"));
@@ -1594,15 +1645,21 @@ fn compare_recommendation_describes_latency_freshness_tradeoff() {
     assert!(!report.network_mismatch);
     assert_eq!(report.best_endpoint_index, Some(2));
     assert_eq!(report.worst_endpoint_index, Some(1));
-    assert!(report
-        .recommendation
-        .contains("RPC #1 has lower latency, but RPC #2 is fresher"));
-    assert!(report
-        .recommendation
-        .contains("slot freshness may matter more than raw HTTP latency"));
-    assert!(!report
-        .recommendation
-        .contains("Avoid RPC #1 for latency-sensitive"));
+    assert!(
+        report
+            .recommendation
+            .contains("RPC #1 has lower latency, but RPC #2 is fresher")
+    );
+    assert!(
+        report
+            .recommendation
+            .contains("slot freshness may matter more than raw HTTP latency")
+    );
+    assert!(
+        !report
+            .recommendation
+            .contains("Avoid RPC #1 for latency-sensitive")
+    );
 }
 
 #[test]
@@ -1625,11 +1682,13 @@ fn colored_human_output_is_semantic_and_disabled_is_byte_identical() {
     let check_default_colored = render_human(&check, on, false);
     assert_ne!(check_default_colored, check_default_plain);
     // Title carries the azure accent; verdict and category statuses are colored.
-    assert!(check_default_colored
-        .contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor · RPC Readiness\x1b[0m"));
+    assert!(
+        check_default_colored
+            .contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor · RPC Readiness\x1b[0m")
+    );
     assert!(check_default_colored.contains("\x1b[1;38;2;248;81;73mBAD\x1b[0m")); // verdict
     assert!(check_default_colored.contains("\x1b[1;38;2;63;185;80mPASS")); // a passing category
-                                                                           // Verbose: the failed method renders FAIL in bold red; disabled stays plain.
+    // Verbose: the failed method renders FAIL in bold red; disabled stays plain.
     let check_verbose_plain = render_human(&check, off, true);
     assert_eq!(render_human(&check, off, true), check_verbose_plain);
     let check_verbose_colored = render_human(&check, on, true);
@@ -1660,11 +1719,13 @@ fn colored_human_output_is_semantic_and_disabled_is_byte_identical() {
     let compare_plain = render_compare_human(&compare, off, false);
     assert_eq!(render_compare_human(&compare, off, false), compare_plain);
     let compare_colored = render_compare_human(&compare, on, false);
-    assert!(compare_colored
-        .contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor · RPC Comparison\x1b[0m"));
+    assert!(
+        compare_colored
+            .contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor · RPC Comparison\x1b[0m")
+    );
     assert!(compare_colored.contains("\x1b[1;38;2;63;185;80mGOOD\x1b[0m")); // green verdict
     assert!(compare_colored.contains("\x1b[1;38;2;210;153;34mWARNING\x1b[0m")); // amber verdict
-                                                                                // Verbose: per-endpoint blocks, bold RPC headings, blockhash yes/no colored.
+    // Verbose: per-endpoint blocks, bold RPC headings, blockhash yes/no colored.
     let compare_verbose = render_compare_human(&compare, on, true);
     assert!(compare_verbose.contains("\x1b[1mRPC #1\x1b[0m"));
     assert!(compare_verbose.contains("\x1b[38;2;63;185;80myes\x1b[0m")); // blockhash yes -> green
@@ -1725,8 +1786,10 @@ fn colored_human_output_is_semantic_and_disabled_is_byte_identical() {
     let ws_plain = ws_render_human(&ws, off, false);
     assert_eq!(ws_render_human(&ws, off, false), ws_plain);
     let ws_colored = ws_render_human(&ws, on, false);
-    assert!(ws_colored
-        .contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor · WebSocket Readiness\x1b[0m"));
+    assert!(
+        ws_colored
+            .contains("\x1b[1;38;2;88;166;255mSolana Infra Doctor · WebSocket Readiness\x1b[0m")
+    );
     assert!(ws_colored.contains("\x1b[1;38;2;63;185;80mPASS")); // Connect PASS -> bold green
     assert!(ws_colored.contains("\x1b[1;38;2;248;81;73mFAIL")); // Close FAIL -> bold red
     assert!(ws_colored.contains("\x1b[1mNotes\x1b[0m")); // bold heading
@@ -1774,7 +1837,7 @@ fn palette_helpers_and_choice_resolution() {
 
 #[test]
 fn output_style_helpers() {
-    use solana_infra_doctor::output::style::{endpoint_label, millis, Status};
+    use solana_infra_doctor::output::style::{Status, endpoint_label, millis};
 
     assert_eq!(millis(68), "68 ms");
 
@@ -1829,8 +1892,10 @@ fn verdict_summary_and_threshold_branches() {
         false,
         Some(ErrorKind::RpcError),
     )];
-    assert!(summarize(Verdict::Warning, &one_fail, Some(50), false)
-        .contains("non-critical check failed"));
+    assert!(
+        summarize(Verdict::Warning, &one_fail, Some(50), false)
+            .contains("non-critical check failed")
+    );
     let elevated = summarize(Verdict::Warning, &pass, Some(800), true);
     assert!(elevated.contains("elevated at 800 ms"));
     assert!(elevated.contains("--fail-on-warning is enabled"));
@@ -2156,10 +2221,12 @@ async fn rpc_retries_transient_429_then_succeeds() {
     server.join();
 
     assert_eq!(report.verdict, Verdict::Good);
-    assert!(report
-        .checks
-        .iter()
-        .all(|check| check.status == CheckStatus::Success));
+    assert!(
+        report
+            .checks
+            .iter()
+            .all(|check| check.status == CheckStatus::Success)
+    );
 }
 
 #[tokio::test]
@@ -2168,7 +2235,7 @@ async fn resilience_backoff_and_rate_limit() {
 
     let _ = Resilience::new(); // exercise new()
     let resilience = Resilience::default(); // and Default
-                                            // Two retries are available (0 and 1), then the policy gives up.
+    // Two retries are available (0 and 1), then the policy gives up.
     assert!(resilience.retry_delay(0).is_some());
     assert!(resilience.retry_delay(1).is_some());
     assert!(resilience.retry_delay(2).is_none());
@@ -2204,24 +2271,24 @@ async fn start_mock_ws_reconnecting() -> String {
         let notification = r#"{"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":1,"root":1,"slot":424000000},"subscription":7}}"#;
 
         // First connection: accept, then drop without a notification.
-        if let Ok((stream, _)) = listener.accept().await {
-            if let Ok(mut ws) = accept_async(stream).await {
-                let _ = ws.next().await; // subscribe request
-                let _ = ws.close(None).await;
-            }
+        if let Ok((stream, _)) = listener.accept().await
+            && let Ok(mut ws) = accept_async(stream).await
+        {
+            let _ = ws.next().await; // subscribe request
+            let _ = ws.close(None).await;
         }
         // Second connection: behave happily.
-        if let Ok((stream, _)) = listener.accept().await {
-            if let Ok(mut ws) = accept_async(stream).await {
-                let _ = ws.next().await; // subscribe request
-                let _ = ws.send(Message::text(confirm)).await;
-                let _ = ws.send(Message::text(notification)).await;
-                let _ = ws.next().await; // unsubscribe request
-                let _ = ws
-                    .send(Message::text(r#"{"jsonrpc":"2.0","result":true,"id":2}"#))
-                    .await;
-                let _ = ws.close(None).await;
-            }
+        if let Ok((stream, _)) = listener.accept().await
+            && let Ok(mut ws) = accept_async(stream).await
+        {
+            let _ = ws.next().await; // subscribe request
+            let _ = ws.send(Message::text(confirm)).await;
+            let _ = ws.send(Message::text(notification)).await;
+            let _ = ws.next().await; // unsubscribe request
+            let _ = ws
+                .send(Message::text(r#"{"jsonrpc":"2.0","result":true,"id":2}"#))
+                .await;
+            let _ = ws.close(None).await;
         }
     });
 
@@ -2249,16 +2316,20 @@ fn ws_subscription_methods_for_slot_and_logs() {
     assert_eq!(Subscription::Slot.method(), "slotSubscribe");
     assert_eq!(Subscription::Slot.unsubscribe_method(), "slotUnsubscribe");
     assert_eq!(Subscription::Slot.notification(), "slotNotification");
-    assert!(Subscription::Slot
-        .subscribe_request()
-        .contains("slotSubscribe"));
+    assert!(
+        Subscription::Slot
+            .subscribe_request()
+            .contains("slotSubscribe")
+    );
 
     assert_eq!(Subscription::Logs.method(), "logsSubscribe");
     assert_eq!(Subscription::Logs.unsubscribe_method(), "logsUnsubscribe");
     assert_eq!(Subscription::Logs.notification(), "logsNotification");
-    assert!(Subscription::Logs
-        .subscribe_request()
-        .contains("logsSubscribe"));
+    assert!(
+        Subscription::Logs
+            .subscribe_request()
+            .contains("logsSubscribe")
+    );
 
     let with_slot: serde_json::Value =
         serde_json::from_str(r#"{"params":{"result":{"slot":42}}}"#).unwrap();
@@ -2333,10 +2404,12 @@ fn compare_block_time_freshness_scoring_and_render() {
 
     // The fresher finalized tip scores higher; the stale one is penalized + noted.
     assert!(report.endpoints[1].score > report.endpoints[0].score);
-    assert!(report.endpoints[0]
-        .notes
-        .iter()
-        .any(|note| note.contains("Finalized block time is stale")));
+    assert!(
+        report.endpoints[0]
+            .notes
+            .iter()
+            .any(|note| note.contains("Finalized block time is stale"))
+    );
 
     // Verbose output surfaces the new fields (Some branches of the formatters).
     let verbose = render_compare_human(&report, plain(), true);
@@ -2403,11 +2476,13 @@ async fn token_program_readiness_failure_paths() {
     assert!(!report.token_2022_ready);
     // Token failures are informational: they cap the verdict at WARNING, not BAD.
     assert_eq!(report.verdict, Verdict::Warning);
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.category == CheckCategory::Token
-            && check.detail.contains("not an executable program")));
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.category == CheckCategory::Token
+                && check.detail.contains("not an executable program"))
+    );
 
     // Run 2: the Token Program account is missing (value: null); Token-2022 is ok.
     let mut responses = healthy_rpc_responses(347_000_000);
@@ -2422,10 +2497,12 @@ async fn token_program_readiness_failure_paths() {
 
     assert!(!report.token_program_ready);
     assert!(report.token_2022_ready);
-    assert!(report
-        .checks
-        .iter()
-        .any(|check| check.detail.contains("account not found")));
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.detail.contains("account not found"))
+    );
 
     // The single-check Result block surfaces the Token row (both readiness arms).
     let human = render_human(&report, plain(), false);
@@ -2455,14 +2532,18 @@ fn compare_token_readiness_scoring_notes_and_render() {
     // Under a token-sensitive profile, serving the token programs scores higher.
     assert!(report.endpoints[0].score > report.endpoints[1].score);
     // The endpoint missing the programs is noted; the ready one is not.
-    assert!(report.endpoints[1]
-        .notes
-        .iter()
-        .any(|note| note.contains("Token-2022 program account is unavailable")));
-    assert!(!report.endpoints[0]
-        .notes
-        .iter()
-        .any(|note| note.contains("unavailable")));
+    assert!(
+        report.endpoints[1]
+            .notes
+            .iter()
+            .any(|note| note.contains("Token-2022 program account is unavailable"))
+    );
+    assert!(
+        !report.endpoints[0]
+            .notes
+            .iter()
+            .any(|note| note.contains("unavailable"))
+    );
 
     // Verbose + Markdown surface both readiness arms.
     let verbose = render_compare_human(&report, plain(), true);
@@ -2479,18 +2560,22 @@ fn compare_token_readiness_scoring_notes_and_render() {
         CompareProfile::Wallet,
         &[report_with_tokens("https://w.example.com/", false, false)],
     );
-    assert!(wallet.endpoints[0]
-        .notes
-        .iter()
-        .any(|note| note.contains("wallet SPL token flows")));
+    assert!(
+        wallet.endpoints[0]
+            .notes
+            .iter()
+            .any(|note| note.contains("wallet SPL token flows"))
+    );
     let bot = build_compare_report(
         CompareProfile::Bot,
         &[report_with_tokens("https://b.example.com/", false, false)],
     );
-    assert!(bot.endpoints[0]
-        .notes
-        .iter()
-        .any(|note| note.contains("token-trading bot")));
+    assert!(
+        bot.endpoints[0]
+            .notes
+            .iter()
+            .any(|note| note.contains("token-trading bot"))
+    );
 }
 
 // --- Data-readiness checks (`--data`): getProgramAccounts + archival depth ---
@@ -2767,10 +2852,12 @@ async fn compare_data_ranks_indexer_and_flags_gated() {
     assert!(report.endpoints[0].score > report.endpoints[1].score);
     assert_eq!(report.best_endpoint_index, Some(1));
     // The gated endpoint carries the indexer advisory note.
-    assert!(report.endpoints[1]
-        .notes
-        .iter()
-        .any(|note| note.contains("getProgramAccounts is gated")));
+    assert!(
+        report.endpoints[1]
+            .notes
+            .iter()
+            .any(|note| note.contains("getProgramAccounts is gated"))
+    );
 
     // Human (verbose) and Markdown render the data-readiness fields.
     let human = solana_infra_doctor::compare::render_human(&report, plain(), true);
@@ -2807,10 +2894,12 @@ fn indexer_degraded_data_readiness_notes_and_renders() {
     );
 
     let report = build_compare_report(CompareProfile::Indexer, &[degraded, healthy]);
-    assert!(report.endpoints[0]
-        .notes
-        .iter()
-        .any(|note| note.contains("could not be determined")));
+    assert!(
+        report.endpoints[0]
+            .notes
+            .iter()
+            .any(|note| note.contains("could not be determined"))
+    );
 
     let human = render_human(&report, plain(), true);
     assert!(human.contains("degraded"));

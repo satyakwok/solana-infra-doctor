@@ -11,14 +11,14 @@ use std::pin::Pin;
 use std::time::Duration;
 use tonic::{Request, Response, Status, Streaming};
 use yellowstone_grpc_proto::geyser::{
-    geyser_server::{Geyser, GeyserServer},
-    subscribe_update::UpdateOneof,
     GetBlockHeightRequest, GetBlockHeightResponse, GetLatestBlockhashRequest,
     GetLatestBlockhashResponse, GetSlotRequest, GetSlotResponse, GetVersionRequest,
     GetVersionResponse, IsBlockhashValidRequest, IsBlockhashValidResponse, PingRequest,
     PongResponse, SubscribeDeshredRequest, SubscribeReplayInfoRequest, SubscribeReplayInfoResponse,
     SubscribeRequest, SubscribeUpdate, SubscribeUpdateDeshred, SubscribeUpdatePong,
     SubscribeUpdateSlot,
+    geyser_server::{Geyser, GeyserServer},
+    subscribe_update::UpdateOneof,
 };
 
 #[derive(Clone, Copy)]
@@ -313,12 +313,12 @@ async fn token_unlocks_authenticated_endpoint() {
 
     let env_name = "SOL_DOCTOR_TEST_TOKEN_UNLOCK";
     let secret = "supersecret-token-value-xyz";
-    std::env::set_var(env_name, secret);
+    unsafe { std::env::set_var(env_name, secret) };
 
     let mut a = args(url);
     a.x_token_env = Some(env_name.to_string());
     let report = grpc::run_grpc_check(a).await.unwrap();
-    std::env::remove_var(env_name);
+    unsafe { std::env::remove_var(env_name) };
 
     assert_eq!(report.verdict, Verdict::Good);
     assert_eq!(report.authentication, AuthStatus::Accepted);
@@ -511,10 +511,11 @@ async fn cross_check_with_far_slots_warns() {
 
     assert_eq!(report.verdict, Verdict::Warning);
     assert!(report.slot_difference.unwrap().unsigned_abs() > 150);
-    assert!(report
-        .checks
-        .iter()
-        .any(|c| matches!(c.category, GrpcCategory::CrossCheck) && c.status == CheckStatus::Warn));
+    assert!(
+        report.checks.iter().any(
+            |c| matches!(c.category, GrpcCategory::CrossCheck) && c.status == CheckStatus::Warn
+        )
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -572,11 +573,11 @@ async fn token_provided_but_rejected_is_unauthenticated() {
     .await;
 
     let env_name = "SOL_DOCTOR_TEST_TOKEN_REJECTED";
-    std::env::set_var(env_name, "wrong-token");
+    unsafe { std::env::set_var(env_name, "wrong-token") };
     let mut a = args(url);
     a.x_token_env = Some(env_name.to_string());
     let report = grpc::run_grpc_check(a).await.unwrap();
-    std::env::remove_var(env_name);
+    unsafe { std::env::remove_var(env_name) };
 
     assert_eq!(report.verdict, Verdict::Bad);
     assert_eq!(report.authentication, AuthStatus::Unauthenticated);
@@ -595,9 +596,11 @@ async fn permission_denied_is_bad() {
     let report = grpc::run_grpc_check(args(url)).await.unwrap();
     assert_eq!(report.verdict, Verdict::Bad);
     assert_eq!(report.authentication, AuthStatus::PermissionDenied);
-    assert!(report
-        .error_kinds
-        .contains(&GrpcErrorKind::PermissionDenied));
+    assert!(
+        report
+            .error_kinds
+            .contains(&GrpcErrorKind::PermissionDenied)
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -670,10 +673,11 @@ async fn cross_check_when_grpc_has_no_slot() {
     assert_eq!(report.verdict, Verdict::Bad); // no first event
     assert!(report.rpc_slot.is_some());
     assert!(report.slot_difference.is_none());
-    assert!(report
-        .checks
-        .iter()
-        .any(|c| matches!(c.category, GrpcCategory::CrossCheck) && c.status == CheckStatus::Skip));
+    assert!(
+        report.checks.iter().any(
+            |c| matches!(c.category, GrpcCategory::CrossCheck) && c.status == CheckStatus::Skip
+        )
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -694,10 +698,12 @@ async fn cross_check_when_rpc_slot_fetch_fails() {
 
     assert_eq!(report.verdict, Verdict::Good);
     assert!(report.rpc_slot.is_none());
-    assert!(report
-        .warnings
-        .iter()
-        .any(|w| w.contains("could not fetch the HTTP RPC slot")));
+    assert!(
+        report
+            .warnings
+            .iter()
+            .any(|w| w.contains("could not fetch the HTTP RPC slot"))
+    );
 }
 
 #[tokio::test]
@@ -705,6 +711,17 @@ async fn missing_token_env_returns_config_error() {
     let mut a = args("https://example-yellowstone-endpoint".to_string());
     a.x_token_env = Some("SOL_DOCTOR_DEFINITELY_UNSET_GRPC_TOKEN".to_string());
     let result = grpc::run_grpc_check(a).await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn whitespace_token_env_returns_config_error() {
+    let env_name = "SOL_DOCTOR_TEST_GRPC_TOKEN_WHITESPACE";
+    unsafe { std::env::set_var(env_name, "   ") };
+    let mut a = args("https://example-yellowstone-endpoint".to_string());
+    a.x_token_env = Some(env_name.to_string());
+    let result = grpc::run_grpc_check(a).await;
+    unsafe { std::env::remove_var(env_name) };
     assert!(result.is_err());
 }
 
@@ -817,13 +834,13 @@ fn grpc_error_kinds_are_stable_and_mapped() {
 /// from crafted `GrpcReport` fixtures, plus full-path runs against the in-process
 /// mock Yellowstone server. Drives diff coverage for `src/grpc/compare/*`.
 mod grpc_compare {
-    use super::{start_mock, AuthBehavior, MockGeyser, StreamBehavior, UnaryBehavior};
+    use super::{AuthBehavior, MockGeyser, StreamBehavior, UnaryBehavior, start_mock};
     use solana_infra_doctor::cli::{GrpcCompareArgs, GrpcCompareProfile};
     use solana_infra_doctor::color::Palette;
     use solana_infra_doctor::grpc::compare::{build_grpc_compare_report, run_grpc_compare};
     use solana_infra_doctor::grpc::{
-        self, AuthStatus, CheckStatus, GrpcErrorKind, GrpcReport, StreamResult, UnaryResult,
-        GRPC_SCHEMA_VERSION,
+        self, AuthStatus, CheckStatus, GRPC_SCHEMA_VERSION, GrpcErrorKind, GrpcReport,
+        StreamResult, UnaryResult,
     };
     use solana_infra_doctor::verdict::Verdict;
 
@@ -964,14 +981,18 @@ mod grpc_compare {
         assert_eq!(general.endpoints[0].score, 75);
         // Latency subtracts 8 (connect>300) and 12 (first_event>1500) → 55.
         assert_eq!(latency.endpoints[0].score, 55);
-        assert!(latency.endpoints[0]
-            .notes
-            .iter()
-            .any(|note| note.contains("Connect latency is high")));
-        assert!(latency.endpoints[0]
-            .notes
-            .iter()
-            .any(|note| note.contains("first-slot-update")));
+        assert!(
+            latency.endpoints[0]
+                .notes
+                .iter()
+                .any(|note| note.contains("Connect latency is high"))
+        );
+        assert!(
+            latency.endpoints[0]
+                .notes
+                .iter()
+                .any(|note| note.contains("first-slot-update"))
+        );
     }
 
     #[test]
@@ -998,9 +1019,11 @@ mod grpc_compare {
         assert_eq!(indexer.endpoints[1].score, 48);
         let notes = &indexer.endpoints[1].notes;
         assert!(notes.iter().any(|n| n.contains("Slot freshness is poor")));
-        assert!(notes
-            .iter()
-            .any(|n| n.contains("did not reach a healthy state")));
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("did not reach a healthy state"))
+        );
     }
 
     #[test]
@@ -1062,9 +1085,11 @@ mod grpc_compare {
         let general = build_grpc_compare_report(GrpcCompareProfile::General, &make());
         assert!(general.recommendation.contains("Review gRPC #2"));
         let latency = build_grpc_compare_report(GrpcCompareProfile::Latency, &make());
-        assert!(latency
-            .recommendation
-            .contains("Avoid gRPC #2 for latency-sensitive"));
+        assert!(
+            latency
+                .recommendation
+                .contains("Avoid gRPC #2 for latency-sensitive")
+        );
         let indexer = build_grpc_compare_report(GrpcCompareProfile::Indexer, &make());
         assert!(indexer.recommendation.contains("freshness-sensitive"));
     }
@@ -1084,10 +1109,12 @@ mod grpc_compare {
             AuthStatus::Unauthenticated,
         );
         let out = build_grpc_compare_report(GrpcCompareProfile::General, &[fixture]);
-        assert!(out.endpoints[0]
-            .notes
-            .iter()
-            .any(|n| n.contains("supply an x-token via --x-token-env")));
+        assert!(
+            out.endpoints[0]
+                .notes
+                .iter()
+                .any(|n| n.contains("supply an x-token via --x-token-env"))
+        );
         // All-None metrics format as n/a, not a panic.
         assert_eq!(out.endpoints[0].slot_lag, None);
     }
@@ -1214,11 +1241,11 @@ mod grpc_compare {
         .await;
 
         let env = "SOL_DOCTOR_TEST_GRPC_COMPARE_SHARED";
-        std::env::set_var(env, "shared-token-value");
+        unsafe { std::env::set_var(env, "shared-token-value") };
         let out = run_grpc_compare(compare_args(vec![one, two], vec![env.to_string()]))
             .await
             .unwrap();
-        std::env::remove_var(env);
+        unsafe { std::env::remove_var(env) };
 
         assert_eq!(out.endpoints[0].verdict, Verdict::Good);
         assert_eq!(out.endpoints[1].verdict, Verdict::Good);
@@ -1243,16 +1270,16 @@ mod grpc_compare {
 
         let env_a = "SOL_DOCTOR_TEST_GRPC_COMPARE_A";
         let env_b = "SOL_DOCTOR_TEST_GRPC_COMPARE_B";
-        std::env::set_var(env_a, "token-a");
-        std::env::set_var(env_b, "token-b");
+        unsafe { std::env::set_var(env_a, "token-a") };
+        unsafe { std::env::set_var(env_b, "token-b") };
         let out = run_grpc_compare(compare_args(
             vec![one, two],
             vec![env_a.to_string(), env_b.to_string()],
         ))
         .await
         .unwrap();
-        std::env::remove_var(env_a);
-        std::env::remove_var(env_b);
+        unsafe { std::env::remove_var(env_a) };
+        unsafe { std::env::remove_var(env_b) };
 
         assert_eq!(out.endpoints[0].verdict, Verdict::Good);
         assert_eq!(out.endpoints[1].verdict, Verdict::Good);
@@ -1330,10 +1357,12 @@ mod grpc_compare {
             GrpcCompareProfile::Indexer,
             &[few, strong("https://s2.example.com/", 1_000)],
         );
-        assert!(indexer.endpoints[0]
-            .notes
-            .iter()
-            .any(|n| n.contains("Few slot updates")));
+        assert!(
+            indexer.endpoints[0]
+                .notes
+                .iter()
+                .any(|n| n.contains("Few slot updates"))
+        );
     }
 
     #[test]

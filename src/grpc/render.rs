@@ -340,8 +340,8 @@ mod tests {
     use super::*;
     use crate::color::Palette;
     use crate::grpc::{
-        AuthStatus, CategoryCheck, GrpcCategory, GrpcErrorKind, StreamResult, UnaryResult,
-        GRPC_SCHEMA_VERSION,
+        AuthStatus, CategoryCheck, GRPC_SCHEMA_VERSION, GrpcCategory, GrpcErrorKind, StreamResult,
+        UnaryResult,
     };
     use crate::verdict::Verdict;
 

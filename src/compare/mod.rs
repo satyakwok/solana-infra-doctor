@@ -3,7 +3,7 @@
 //! lives in [`render`] and scoring in [`scoring`].
 
 use crate::{
-    checks::{run_check, CheckReport, CheckStatus, ProgramAccountsReadiness},
+    checks::{CheckReport, CheckStatus, ProgramAccountsReadiness, run_check},
     cli::{CheckArgs, CompareArgs, CompareProfile},
     error::AppError,
     verdict::Verdict,

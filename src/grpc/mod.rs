@@ -272,18 +272,22 @@ fn resolve_token(env_name: Option<&str>) -> Result<Option<MetadataValue<Ascii>>,
     let Some(name) = env_name else {
         return Ok(None);
     };
-    let value = match std::env::var(name) {
-        Ok(value) if !value.trim().is_empty() => value,
-        _ => {
-            return Err(AppError::MissingTokenEnv {
-                var: name.to_string(),
-            });
-        }
-    };
-    // gRPC ASCII metadata only; an invalid value is reported without echoing it.
-    let metadata =
-        MetadataValue::try_from(value.as_str()).map_err(|_| AppError::InvalidTokenValue)?;
-    Ok(Some(metadata))
+    let value = std::env::var(name).map_err(|_| AppError::MissingTokenEnv {
+        var: name.to_string(),
+    })?;
+    token_from_env_value(name, &value).map(Some)
+}
+
+/// Validate a raw `x-token` value and parse it into gRPC ASCII metadata. An empty
+/// or whitespace-only value is treated as a missing token; an invalid value is
+/// reported without echoing it.
+fn token_from_env_value(var: &str, value: &str) -> Result<MetadataValue<Ascii>, AppError> {
+    if value.trim().is_empty() {
+        return Err(AppError::MissingTokenEnv {
+            var: var.to_string(),
+        });
+    }
+    MetadataValue::try_from(value).map_err(|_| AppError::InvalidTokenValue)
 }
 
 /// Fetch the current slot from an HTTP RPC endpoint for the cross-check, reusing
@@ -649,9 +653,11 @@ mod tests {
         let error = resolve_token(Some("SOL_DOCTOR_DEFINITELY_UNSET_TOKEN_XYZ")).unwrap_err();
         assert!(matches!(error, AppError::MissingTokenEnv { .. }));
         // The error message names the variable, never a value.
-        assert!(error
-            .to_string()
-            .contains("SOL_DOCTOR_DEFINITELY_UNSET_TOKEN_XYZ"));
+        assert!(
+            error
+                .to_string()
+                .contains("SOL_DOCTOR_DEFINITELY_UNSET_TOKEN_XYZ")
+        );
     }
 
     #[test]
@@ -660,22 +666,16 @@ mod tests {
     }
 
     #[test]
-    fn present_token_env_resolves_to_metadata() {
-        // SAFETY of test: set then remove a process-local env var.
-        let name = "SOL_DOCTOR_TEST_TOKEN_PRESENT";
-        std::env::set_var(name, "secret-token-value");
-        let resolved = resolve_token(Some(name)).unwrap();
-        std::env::remove_var(name);
-        assert!(resolved.is_some());
+    fn present_token_value_resolves_to_metadata() {
+        assert!(token_from_env_value("X_TOKEN", "secret-token-value").is_ok());
     }
 
     #[test]
-    fn empty_token_env_is_a_config_error() {
-        let name = "SOL_DOCTOR_TEST_TOKEN_EMPTY";
-        std::env::set_var(name, "   ");
-        let result = resolve_token(Some(name));
-        std::env::remove_var(name);
-        assert!(matches!(result, Err(AppError::MissingTokenEnv { .. })));
+    fn empty_token_value_is_a_config_error() {
+        assert!(matches!(
+            token_from_env_value("X_TOKEN", "   "),
+            Err(AppError::MissingTokenEnv { .. })
+        ));
     }
 
     fn ready_stream() -> StreamResult {
@@ -849,10 +849,12 @@ mod tests {
         );
         assert_eq!(report.verdict, Verdict::Bad);
         assert!(report.error_kinds.contains(&GrpcErrorKind::TlsError));
-        assert!(report
-            .checks
-            .iter()
-            .any(|c| c.category == GrpcCategory::Transport && c.status == CheckStatus::Fail));
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|c| c.category == GrpcCategory::Transport && c.status == CheckStatus::Fail)
+        );
         assert!(!report.remediation.is_empty());
     }
 
@@ -869,10 +871,11 @@ mod tests {
             None,
         );
         assert_eq!(report.verdict, Verdict::Bad);
-        assert!(report
-            .checks
-            .iter()
-            .any(|c| c.category == GrpcCategory::Authentication && c.status == CheckStatus::Fail));
+        assert!(
+            report.checks.iter().any(
+                |c| c.category == GrpcCategory::Authentication && c.status == CheckStatus::Fail
+            )
+        );
     }
 
     #[test]
@@ -892,10 +895,12 @@ mod tests {
             None,
         );
         assert_eq!(report.verdict, Verdict::Bad);
-        assert!(report
-            .checks
-            .iter()
-            .any(|c| c.category == GrpcCategory::Stream && c.status == CheckStatus::Fail));
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|c| c.category == GrpcCategory::Stream && c.status == CheckStatus::Fail)
+        );
     }
 
     #[test]
@@ -917,10 +922,12 @@ mod tests {
             None,
         );
         assert_eq!(report.verdict, Verdict::Warning);
-        assert!(report
-            .checks
-            .iter()
-            .any(|c| c.category == GrpcCategory::Unary && c.status == CheckStatus::Warn));
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|c| c.category == GrpcCategory::Unary && c.status == CheckStatus::Warn)
+        );
         assert!(!report.warnings.is_empty());
     }
 }

@@ -91,7 +91,7 @@ pub fn derive_ws_url(rpc: &Url, override_ws: Option<&str>) -> Result<Url, AppErr
         other => {
             return Err(AppError::InvalidRpcUrl {
                 reason: format!("cannot derive WebSocket URL from scheme '{other}'"),
-            })
+            });
         }
     };
     ws.set_scheme(scheme)
