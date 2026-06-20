@@ -5,6 +5,8 @@
 ### Documentation / metadata
 - List exit codes in `sol-doctor --help` so CI users see them without leaving the
   terminal (`0` GOOD | `1` WARNING | `2` BAD | `3` UNKNOWN).
+- Add a [glossary](docs/glossary.md) defining recurring RPC readiness terms
+  (slot lag, freshness, archival depth, etc.).
 
 ## 0.14.0 - 2026-06-06
 
