@@ -917,6 +917,8 @@ passed. Full matrix: [`docs/audit/real-run-matrix.md`](docs/audit/real-run-matri
 | `2` | `BAD` | URL is invalid, endpoint is unreachable, critical checks failed, repeated timeouts occurred, or latency is too high. |
 | `3` | `UNKNOWN` or internal error | Not enough data for a reliable verdict, or an unexpected internal error occurred. |
 
+> See the [glossary](docs/glossary.md) for definitions of RPC readiness terms.
+
 ## Use in CI (GitHub Action)
 
 Gate a workflow on RPC readiness with the bundled composite action — it installs
