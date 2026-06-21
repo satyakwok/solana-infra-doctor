@@ -2,6 +2,10 @@
 
 ## 0.14.1 - Unreleased
 
+### Fixed
+- Include accepted schemes in `InvalidRpcUrl` error messages so mistyped URLs
+  hint at the expected format.
+
 ### Documentation / metadata
 - List exit codes in `sol-doctor --help` so CI users see them without leaving the
   terminal (`0` GOOD | `1` WARNING | `2` BAD | `3` UNKNOWN).
