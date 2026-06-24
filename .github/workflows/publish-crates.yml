@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout main
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Always publish the exact main branch state, never an arbitrary ref.
           ref: main
