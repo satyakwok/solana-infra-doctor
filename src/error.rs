@@ -8,7 +8,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum AppError {
     /// The RPC URL could not be parsed or used an unsupported scheme.
-    #[error("invalid RPC URL: {reason}")]
+    #[error("invalid RPC URL: {reason} (accepted schemes: http://, https://, ws://, wss://)")]
     InvalidRpcUrl { reason: String },
 
     /// The HTTP client could not be constructed.
@@ -66,4 +66,21 @@ pub enum AppError {
     /// value itself is never included in the message.
     #[error("x-token value is not valid gRPC metadata (must be ASCII)")]
     InvalidTokenValue,
+}
+
+#[cfg(all(test, not(coverage)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_rpc_url_includes_scheme_hint() {
+        let err = AppError::InvalidRpcUrl {
+            reason: "bad url".into(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("http://"));
+        assert!(msg.contains("https://"));
+        assert!(msg.contains("ws://"));
+        assert!(msg.contains("wss://"));
+    }
 }
