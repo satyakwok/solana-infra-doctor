@@ -68,7 +68,7 @@ pub enum AppError {
     InvalidTokenValue,
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(coverage)))]
 mod tests {
     use super::*;
 
