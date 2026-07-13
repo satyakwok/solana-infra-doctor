@@ -44,7 +44,7 @@ thiserror = "2.0"
 tokio = { version = "1.37", features = ["macros", "rt-multi-thread", "time", "net"] }
 tonic = { version = "0.14", default-features = false, features = ["channel", "codegen", "server", "transport", "tls-ring", "tls-webpki-roots"] }
 yellowstone-grpc-proto = { version = "12.4", default-features = false, features = ["tonic"] }
-tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2.5"
